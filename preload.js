@@ -1,8 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+let onMenuOpenFolder = null;
+ipcRenderer.on('menu-open-folder', () => {
+  if (typeof onMenuOpenFolder === 'function') onMenuOpenFolder();
+});
+
 contextBridge.exposeInMainWorld('alexide', {
   platform: process.platform,
   openFolder: () => ipcRenderer.invoke('open-folder'),
+  onMenuOpenFolder: (fn) => { onMenuOpenFolder = fn; },
   listDir: (dirPath) => ipcRenderer.invoke('list-dir', dirPath),
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
   writeFile: (filePath, content) => ipcRenderer.invoke('write-file', filePath, content),

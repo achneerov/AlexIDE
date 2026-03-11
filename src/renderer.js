@@ -243,6 +243,7 @@
     }
 
     document.getElementById('open-folder-sidebar').addEventListener('click', openFolderClicked);
+    if (window.alexide.onMenuOpenFolder) window.alexide.onMenuOpenFolder(openFolderClicked);
 
     document.addEventListener('keydown', function (e) {
       if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
