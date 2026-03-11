@@ -6,6 +6,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; worker-src 'self' blob: https://cdn.jsdelivr.net;">
   <title>AlexIDE</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="../node_modules/xterm/css/xterm.css">
 </head>
 <body>
   <div class="ide">
@@ -31,10 +32,22 @@
       </main>
     </div>
 
+    <div class="panel-resizer" id="panel-resizer" title="Drag to resize"></div>
+    <section class="panel" id="terminal-panel" aria-label="Terminal">
+      <div class="panel-header">
+        <span class="panel-title">Terminal</span>
+        <button type="button" class="panel-toggle" id="panel-toggle" aria-label="Minimize terminal panel">−</button>
+      </div>
+      <div class="panel-content">
+        <div id="terminal-container"></div>
+      </div>
+    </section>
+
     <footer class="status-bar">
       <div class="status-left">
         <span id="status-item" class="status-item">Ready</span>
         <span id="status-encoding" class="status-item">UTF-8</span>
+        <button type="button" id="status-terminal-btn" class="status-terminal-btn" title="Toggle Terminal">Terminal</button>
       </div>
       <div class="status-right">
         <span id="status-position" class="status-item">Ln 1, Col 1</span>
@@ -42,6 +55,9 @@
     </footer>
   </div>
 
+  <!-- Load xterm before Monaco's RequireJS so they attach to window instead of conflicting with AMD -->
+  <script src="../node_modules/xterm/lib/xterm.js"></script>
+  <script src="../node_modules/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
   <script src="renderer.js"></script>
 </body>

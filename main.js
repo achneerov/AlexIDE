@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
+const pty = require('node-pty');
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -19,7 +20,59 @@ function createWindow() {
 
   win.once('ready-to-show', () => win.show());
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
+
+  win.on('closed', () => {
+    const ptyProcess = terminalPtyMap.get(win.id);
+    if (ptyProcess) {
+      try { ptyProcess.kill(); } catch (_) {}
+      terminalPtyMap.delete(win.id);
+    }
+  });
 }
+
+const terminalPtyMap = new Map();
+
+ipcMain.handle('terminal-create', async (event, cwd) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return { ok: false, error: 'No window' };
+  const winId = win.id;
+  if (terminalPtyMap.has(winId)) {
+    return { ok: true };
+  }
+  const shell = process.platform === 'win32' ? process.env.COMSPEC || 'cmd.exe' : (process.env.SHELL || '/bin/sh');
+  const startCwd = cwd && path.isAbsolute(cwd) ? cwd : (cwd ? path.resolve(cwd) : process.cwd());
+  try {
+    const ptyProcess = pty.spawn(shell, [], {
+      name: 'xterm-256color',
+      cwd: startCwd,
+      env: process.env,
+    });
+    terminalPtyMap.set(winId, ptyProcess);
+    ptyProcess.onData((data) => {
+      if (win && !win.isDestroyed()) win.webContents.send('terminal-data', data);
+    });
+    ptyProcess.onExit(() => {
+      terminalPtyMap.delete(winId);
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.on('terminal-input', (event, data) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return;
+  const ptyProcess = terminalPtyMap.get(win.id);
+  if (ptyProcess) ptyProcess.write(data);
+});
+
+ipcMain.on('terminal-resize', (event, cols, rows) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return;
+  const ptyProcess = terminalPtyMap.get(win.id);
+  if (ptyProcess) ptyProcess.resize(cols, rows);
+});
 
 app.whenReady().then(createWindow);
 

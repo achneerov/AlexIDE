@@ -23,7 +23,7 @@
   });
 
   function initApp() {
-    const { openFolder, listDir, readFile, writeFile } = window.alexide;
+    const { openFolder, listDir, readFile, writeFile, terminal: terminalAPI } = window.alexide;
     let projectRoot = null;
     let editor = null;
     const openTabs = new Map();
@@ -35,6 +35,21 @@
     const tabsEl = document.getElementById('tabs');
     const statusItem = document.getElementById('status-item');
     const statusPosition = document.getElementById('status-position');
+    const ideEl = document.querySelector('.ide');
+    const terminalPanel = document.getElementById('terminal-panel');
+    const panelResizer = document.getElementById('panel-resizer');
+    const panelToggle = document.getElementById('panel-toggle');
+    const statusTerminalBtn = document.getElementById('status-terminal-btn');
+    const terminalContainer = document.getElementById('terminal-container');
+
+    let xtermTerminal = null;
+    let xtermFitAddon = null;
+    const PANEL_HEIGHT_KEY = 'alexide-panel-height';
+    const PANEL_COLLAPSED_KEY = 'alexide-panel-collapsed';
+    const DEFAULT_PANEL_HEIGHT = 240;
+    const MIN_PANEL_HEIGHT = 80;
+    const MAX_PANEL_HEIGHT_PERCENT = 0.6;
+    const PANEL_BAR_HEIGHT = 28;
 
     function getExtension(path) {
       const i = path.lastIndexOf('.');
@@ -233,6 +248,105 @@
       if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         saveCurrent();
+      }
+    });
+
+    function getStoredPanelHeight() {
+      const v = localStorage.getItem(PANEL_HEIGHT_KEY);
+      const n = parseInt(v, 10);
+      return Number.isFinite(n) && n >= MIN_PANEL_HEIGHT ? n : DEFAULT_PANEL_HEIGHT;
+    }
+
+    function setPanelHeight(h) {
+      const max = window.innerHeight * MAX_PANEL_HEIGHT_PERCENT;
+      const height = Math.max(MIN_PANEL_HEIGHT, Math.min(max, h));
+      terminalPanel.style.height = height + 'px';
+      localStorage.setItem(PANEL_HEIGHT_KEY, String(height));
+      if (xtermFitAddon && xtermTerminal) xtermFitAddon.fit();
+    }
+
+    function setPanelCollapsed(collapsed) {
+      terminalPanel.classList.toggle('collapsed', collapsed);
+      ideEl.classList.toggle('panel-collapsed', collapsed);
+      terminalPanel.style.height = collapsed ? (PANEL_BAR_HEIGHT + 'px') : (getStoredPanelHeight() + 'px');
+      localStorage.setItem(PANEL_COLLAPSED_KEY, collapsed ? '1' : '0');
+      panelToggle.textContent = collapsed ? '+' : '−';
+      panelToggle.setAttribute('aria-label', collapsed ? 'Show terminal panel' : 'Minimize terminal panel');
+      if (!collapsed && xtermFitAddon && xtermTerminal) {
+        setTimeout(function () { xtermFitAddon.fit(); }, 0);
+      }
+    }
+
+    function togglePanel() {
+      const collapsed = terminalPanel.classList.contains('collapsed');
+      setPanelCollapsed(!collapsed);
+      if (!collapsed) initTerminal();
+    }
+
+    function initTerminal() {
+      if (xtermTerminal) return;
+      const Terminal = window.Terminal;
+      const FitAddonCtor = window.FitAddon?.FitAddon || window.FitAddon;
+      if (!Terminal || !FitAddonCtor) return;
+      xtermTerminal = new Terminal({
+        theme: { background: '#1e1e1e', foreground: '#cccccc' },
+        fontFamily: 'SF Mono, Monaco, Cascadia Code, Source Code Pro, Menlo, Consolas, monospace',
+        fontSize: 13,
+        cursorBlink: true,
+      });
+      xtermFitAddon = new FitAddonCtor();
+      xtermTerminal.loadAddon(xtermFitAddon);
+      xtermTerminal.open(terminalContainer);
+      xtermFitAddon.fit();
+
+      terminalAPI.onData(function (data) {
+        if (xtermTerminal) xtermTerminal.write(data);
+      });
+      xtermTerminal.onData(function (data) {
+        terminalAPI.sendInput(data);
+      });
+
+      terminalAPI.create(projectRoot || undefined).then(function (res) {
+        if (!res.ok) {
+          xtermTerminal.writeln('Terminal error: ' + (res.error || 'Unknown'));
+          return;
+        }
+        xtermFitAddon.fit();
+        terminalAPI.resize(xtermTerminal.cols, xtermTerminal.rows);
+      });
+    }
+
+    const collapsedStored = localStorage.getItem(PANEL_COLLAPSED_KEY) === '1';
+    const initialHeight = getStoredPanelHeight();
+    terminalPanel.style.height = initialHeight + 'px';
+    setPanelCollapsed(collapsedStored);
+    if (!collapsedStored) initTerminal();
+
+    panelToggle.addEventListener('click', togglePanel);
+    statusTerminalBtn.addEventListener('click', togglePanel);
+
+    panelResizer.addEventListener('mousedown', function (e) {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const startY = e.clientY;
+      const startHeight = terminalPanel.offsetHeight;
+
+      function onMouseMove(ev) {
+        const delta = startY - ev.clientY;
+        setPanelHeight(startHeight + delta);
+      }
+      function onMouseUp() {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      }
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+
+    window.addEventListener('resize', function () {
+      if (xtermFitAddon && xtermTerminal && !terminalPanel.classList.contains('collapsed')) {
+        xtermFitAddon.fit();
+        terminalAPI.resize(xtermTerminal.cols, xtermTerminal.rows);
       }
     });
   }
