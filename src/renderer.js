@@ -142,7 +142,9 @@
 
     function getFileIcon(entry) {
       const ext = getExtension(entry.name);
-      return '<span class="icon icon-file ext-' + ext + '" aria-hidden="true">' +
+      const colors = window.FILE_ICON_COLORS || {};
+      const color = colors[ext] || '#8c8c8c';
+      return '<span class="icon icon-file" style="color:' + color + '" aria-hidden="true" data-ext="' + escapeHtml(ext) + '">' +
         '<svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/></svg></span>';
     }
 

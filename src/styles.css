@@ -278,25 +278,7 @@ html, body {
   overflow: visible;
 }
 
-/* VS Code–style file type colors */
-.tree-item .icon-file.ext-js,
-.tree-item .icon-file.ext-jsx,
-.tree-item .icon-file.ext-mjs,
-.tree-item .icon-file.ext-cjs { color: #d4b83d; }
-.tree-item .icon-file.ext-ts,
-.tree-item .icon-file.ext-tsx { color: #3178c6; }
-.tree-item .icon-file.ext-json { color: #d4b83d; }
-.tree-item .icon-file.ext-html { color: #e44d26; }
-.tree-item .icon-file.ext-css,
-.tree-item .icon-file.ext-scss,
-.tree-item .icon-file.ext-less { color: #563d7c; }
-.tree-item .icon-file.ext-md,
-.tree-item .icon-file.ext-markdown { color: #519aba; }
-.tree-item .icon-file.ext-py { color: #3572a5; }
-.tree-item .icon-file.ext-sh,
-.tree-item .icon-file.ext-bash { color: #89e051; }
-.tree-item .icon-file.ext-yaml,
-.tree-item .icon-file.ext-yml { color: #cb171e; }
+/* File icon default color is set in renderer from file-icon-colors.js */
 
 .tree-item .name {
   white-space: nowrap;
