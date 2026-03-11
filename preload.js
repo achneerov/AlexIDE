@@ -7,6 +7,7 @@ ipcRenderer.on('menu-open-folder', () => {
 
 contextBridge.exposeInMainWorld('alexide', {
   platform: process.platform,
+  getIconDataUrl: () => ipcRenderer.invoke('get-icon-data-url'),
   openFolder: () => ipcRenderer.invoke('open-folder'),
   onMenuOpenFolder: (fn) => { onMenuOpenFolder = fn; },
   listDir: (dirPath) => ipcRenderer.invoke('list-dir', dirPath),

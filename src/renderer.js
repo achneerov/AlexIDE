@@ -1,5 +1,14 @@
 /* global require */
 (function () {
+  if (window.alexide && window.alexide.getIconDataUrl) {
+    window.alexide.getIconDataUrl().then(function (r) {
+      if (r && r.ok && r.dataUrl) {
+        const link = document.getElementById('favicon');
+        if (link) link.href = r.dataUrl;
+      }
+    });
+  }
+
   const BASE = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min';
 
   require.config({

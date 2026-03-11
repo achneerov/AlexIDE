@@ -1,7 +1,9 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const pty = require('node-pty');
+
+const iconPath = path.join(__dirname, 'assets', 'icon.png');
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -9,6 +11,7 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -114,6 +117,7 @@ function buildAppMenu() {
 }
 
 app.whenReady().then(() => {
+  if (app.dock) app.dock.setIcon(nativeImage.createFromPath(iconPath));
   buildAppMenu();
   createWindow();
 });
@@ -162,6 +166,16 @@ ipcMain.handle('list-dir', async (_event, dirPath) => {
   } catch (err) {
     console.log('[AlexIDE] list-dir: error', err.message);
     return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('get-icon-data-url', async () => {
+  try {
+    const buf = await fs.readFile(iconPath);
+    const base64 = buf.toString('base64');
+    return { ok: true, dataUrl: 'data:image/png;base64,' + base64 };
+  } catch (err) {
+    return { ok: false };
   }
 });
 
