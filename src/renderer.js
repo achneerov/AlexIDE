@@ -225,15 +225,26 @@
       }
 
       if (entry.isDirectory) {
+        function collapseFolder(node) {
+          node.style.display = 'none';
+          if (node.classList && node.classList.contains('tree-item-dir') && node._childNodes && node._childNodes.length) {
+            node.classList.remove('open');
+            const chev = node.querySelector('.tree-chevron');
+            if (chev) chev.classList.remove('open');
+            node._childNodes.forEach(collapseFolder);
+          }
+        }
         row.addEventListener('click', function (e) {
           e.stopPropagation();
           const open = wrap.classList.toggle('open');
           const chevronEl = wrap.querySelector('.tree-chevron');
           if (chevronEl) chevronEl.classList.toggle('open', open);
           if (wrap._childNodes) {
-            wrap._childNodes.forEach(function (n) {
-              n.style.display = open ? '' : 'none';
-            });
+            if (open) {
+              wrap._childNodes.forEach(function (n) { n.style.display = ''; });
+            } else {
+              wrap._childNodes.forEach(collapseFolder);
+            }
             return;
           }
           listDir(entry.path).then(function (r) {
