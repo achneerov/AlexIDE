@@ -143,7 +143,7 @@
     function getFileIcon(entry) {
       const ext = getExtension(entry.name);
       return '<span class="icon icon-file ext-' + ext + '" aria-hidden="true">' +
-        '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5l-4-4H4zm0 1h4v3h5v9H4V2z"/></svg></span>';
+        '<svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/></svg></span>';
     }
 
     function switchToTab(filePath) {
