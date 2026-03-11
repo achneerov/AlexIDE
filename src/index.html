@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; worker-src 'self' blob: https://cdn.jsdelivr.net;">
+  <title>AlexIDE</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="ide">
+    <div class="workbench">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <span>Explorer</span>
+        </div>
+        <div class="sidebar-content">
+          <div id="folder-placeholder" class="placeholder">
+            <p>No folder opened</p>
+            <button type="button" class="open-folder-btn" id="open-folder-sidebar">Open Folder</button>
+          </div>
+          <div id="file-tree" class="file-tree" style="display: none;"></div>
+        </div>
+      </aside>
+
+      <main class="editor-area">
+        <div class="tabs" id="tabs"></div>
+        <div class="editor-container" id="editor-container">
+          <div id="monaco-root"></div>
+        </div>
+      </main>
+    </div>
+
+    <footer class="status-bar">
+      <div class="status-left">
+        <span id="status-item" class="status-item">Ready</span>
+        <span id="status-encoding" class="status-item">UTF-8</span>
+      </div>
+      <div class="status-right">
+        <span id="status-position" class="status-item">Ln 1, Col 1</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

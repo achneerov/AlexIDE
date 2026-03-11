@@ -1,0 +1,19 @@
+{
+  "name": "alexide",
+  "version": "0.1.0",
+  "description": "An IDE built with Electron and Monaco",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
+  "keywords": ["ide", "electron", "monaco"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "monaco-editor": "^0.52.0"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0"
+  }
+}
