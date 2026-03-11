@@ -202,44 +202,113 @@ html, body {
   background: #1177bb;
 }
 
-/* File tree */
+/* File tree – vertical layout like VS Code */
 .file-tree {
   padding: 4px 0;
 }
 
 .tree-item {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+.tree-item-row {
   display: flex;
   align-items: center;
-  padding: 2px 12px;
+  min-height: 22px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 2px 12px 2px 6px;
   cursor: pointer;
   font-size: 13px;
   user-select: none;
-  gap: 6px;
+  gap: 0;
+  overflow: visible;
 }
 
-.tree-item:hover {
+.tree-item-row:hover {
   background: rgba(255, 255, 255, 0.06);
 }
 
-.tree-item.open {
+.tree-item.open > .tree-item-row {
   background: rgba(255, 255, 255, 0.08);
+}
+
+.tree-chevron {
+  width: 10px;
+  height: 16px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #8c8c8c;
+  font-size: 9px;
+  font-weight: bold;
+  transition: transform 0.15s ease;
+  margin-left: 0;
+}
+
+.tree-chevron.open {
+  transform: rotate(90deg);
+}
+
+.icon-folder-placeholder {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.tree-chevron-spacer {
+  visibility: hidden;
+  width: 10px;
 }
 
 .tree-item .icon {
   width: 16px;
   height: 16px;
+  min-height: 16px;
   flex-shrink: 0;
-  opacity: 0.8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #8c8c8c;
+  overflow: visible;
 }
+
+.tree-item .icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  overflow: visible;
+}
+
+/* VS Code–style file type colors */
+.tree-item .icon-file.ext-js,
+.tree-item .icon-file.ext-jsx,
+.tree-item .icon-file.ext-mjs,
+.tree-item .icon-file.ext-cjs { color: #d4b83d; }
+.tree-item .icon-file.ext-ts,
+.tree-item .icon-file.ext-tsx { color: #3178c6; }
+.tree-item .icon-file.ext-json { color: #d4b83d; }
+.tree-item .icon-file.ext-html { color: #e44d26; }
+.tree-item .icon-file.ext-css,
+.tree-item .icon-file.ext-scss,
+.tree-item .icon-file.ext-less { color: #563d7c; }
+.tree-item .icon-file.ext-md,
+.tree-item .icon-file.ext-markdown { color: #519aba; }
+.tree-item .icon-file.ext-py { color: #3572a5; }
+.tree-item .icon-file.ext-sh,
+.tree-item .icon-file.ext-bash { color: #89e051; }
+.tree-item .icon-file.ext-yaml,
+.tree-item .icon-file.ext-yml { color: #cb171e; }
 
 .tree-item .name {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.tree-children {
-  padding-left: 16px;
+  min-width: 0;
 }
 
 /* Editor area */

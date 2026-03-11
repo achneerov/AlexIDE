@@ -140,6 +140,12 @@
       return div.innerHTML;
     }
 
+    function getFileIcon(entry) {
+      const ext = getExtension(entry.name);
+      return '<span class="icon icon-file ext-' + ext + '" aria-hidden="true">' +
+        '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5l-4-4H4zm0 1h4v3h5v9H4V2z"/></svg></span>';
+    }
+
     function switchToTab(filePath) {
       const tab = openTabs.get(filePath);
       if (!tab) return;
@@ -192,37 +198,67 @@
       });
     }
 
-    function renderTree(entries, parentPath, container) {
-      entries.forEach(function (entry) {
-        const div = document.createElement('div');
-        div.className = 'tree-item';
-        div.dataset.path = entry.path;
-        div.dataset.isDir = entry.isDirectory;
-        const icon = entry.isDirectory ? '📁' : '📄';
-        div.innerHTML = '<span class="icon">' + icon + '</span><span class="name">' + escapeHtml(entry.name) + '</span>';
-        container.appendChild(div);
+    function createTreeItem(entry, depth, container, insertAfterNode) {
+      const wrap = document.createElement('div');
+      wrap.className = 'tree-item' + (entry.isDirectory ? ' tree-item-dir' : '');
+      wrap.dataset.path = entry.path;
+      wrap.dataset.isDir = entry.isDirectory;
+      wrap.dataset.depth = depth;
 
-        if (entry.isDirectory) {
-          div.addEventListener('click', function (e) {
-            e.stopPropagation();
-            div.classList.toggle('open');
-            const children = div.querySelector('.tree-children');
-            if (children) {
-              children.style.display = children.style.display === 'none' ? 'block' : 'none';
-              return;
-            }
-            const childContainer = document.createElement('div');
-            childContainer.className = 'tree-children';
-            div.appendChild(childContainer);
-            listDir(entry.path).then(function (r) {
-              if (r.ok) renderTree(r.entries, entry.path, childContainer);
+      const row = document.createElement('div');
+      row.className = 'tree-item-row';
+      row.style.paddingLeft = (depth * 16 + 6) + 'px';
+      const isDir = entry.isDirectory;
+      const chevron = isDir
+        ? '<span class="tree-chevron" aria-hidden="true">&gt;</span>'
+        : '<span class="tree-chevron tree-chevron-spacer" aria-hidden="true"></span>';
+      const icon = isDir
+        ? '<span class="icon icon-folder-placeholder" aria-hidden="true"></span>'
+        : getFileIcon(entry);
+      row.innerHTML = chevron + icon + '<span class="name">' + escapeHtml(entry.name) + '</span>';
+      wrap.appendChild(row);
+
+      if (insertAfterNode) {
+        container.insertBefore(wrap, insertAfterNode.nextSibling);
+      } else {
+        container.appendChild(wrap);
+      }
+
+      if (entry.isDirectory) {
+        row.addEventListener('click', function (e) {
+          e.stopPropagation();
+          const open = wrap.classList.toggle('open');
+          const chevronEl = wrap.querySelector('.tree-chevron');
+          if (chevronEl) chevronEl.classList.toggle('open', open);
+          if (wrap._childNodes) {
+            wrap._childNodes.forEach(function (n) {
+              n.style.display = open ? '' : 'none';
+            });
+            return;
+          }
+          listDir(entry.path).then(function (r) {
+            if (!r.ok) return;
+            wrap._childNodes = [];
+            let insertAfter = wrap;
+            r.entries.forEach(function (childEntry) {
+              insertAfter = createTreeItem(childEntry, depth + 1, container, insertAfter);
+              wrap._childNodes.push(insertAfter);
             });
           });
-        } else {
-          div.addEventListener('click', function () {
-            openFile(entry.path, entry.name);
-          });
-        }
+        });
+      } else {
+        row.addEventListener('click', function () {
+          openFile(entry.path, entry.name);
+        });
+      }
+      return wrap;
+    }
+
+    function renderTree(entries, parentPath, container, depth, insertAfterNode) {
+      depth = depth || 0;
+      let prev = insertAfterNode || null;
+      entries.forEach(function (entry) {
+        prev = createTreeItem(entry, depth, container, prev);
       });
     }
 
@@ -236,7 +272,7 @@
         statusItem.textContent = 'Loading…';
         listDir(folderPath).then(function (r) {
           statusItem.textContent = 'Ready';
-          if (r.ok) renderTree(r.entries, folderPath, fileTreeEl);
+          if (r.ok) renderTree(r.entries, folderPath, fileTreeEl, 0);
           else statusItem.textContent = 'Error: ' + r.error;
         });
       });
