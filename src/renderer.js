@@ -212,9 +212,7 @@
       const chevron = isDir
         ? '<span class="tree-chevron" aria-hidden="true">&gt;</span>'
         : '<span class="tree-chevron tree-chevron-spacer" aria-hidden="true"></span>';
-      const icon = isDir
-        ? '<span class="icon icon-folder-placeholder" aria-hidden="true"></span>'
-        : getFileIcon(entry);
+        const icon = isDir ? '' : getFileIcon(entry);
       row.innerHTML = chevron + icon + '<span class="name">' + escapeHtml(entry.name) + '</span>';
       wrap.appendChild(row);
 

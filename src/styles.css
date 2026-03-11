@@ -247,17 +247,11 @@ html, body {
   font-weight: bold;
   transition: transform 0.15s ease;
   margin-left: 0;
+  margin-right: 5px;
 }
 
 .tree-chevron.open {
   transform: rotate(90deg);
-}
-
-.icon-folder-placeholder {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  display: inline-block;
 }
 
 .tree-chevron-spacer {
