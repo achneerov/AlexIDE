@@ -154,7 +154,6 @@ ipcMain.handle('list-dir', async (_event, dirPath) => {
   try {
     const names = await fs.readdir(dirPath, { withFileTypes: true });
     const entries = names
-      .filter((d) => !d.name.startsWith('.'))
       .map((d) => ({
         name: d.name,
         path: path.join(dirPath, d.name),
@@ -231,7 +230,7 @@ ipcMain.handle('git-status', async (_event, cwd) => {
     return { ok: true, isRepo: false, staged: [], unstaged: [], aheadCount: 0 };
   }
   try {
-    const { stdout } = await execAsync('git status --porcelain', { cwd, maxBuffer: 1024 * 1024 });
+    const { stdout } = await execAsync('git status --porcelain -uall', { cwd, maxBuffer: 1024 * 1024 });
     const { staged, unstaged } = parsePorcelain(stdout);
     let aheadCount = 0;
     try {
