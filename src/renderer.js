@@ -72,6 +72,7 @@
 
     let xtermTerminal = null;
     let xtermFitAddon = null;
+    let terminalDataListenerRegistered = false;
     const SIDEBAR_WIDTH_KEY = 'alexide-sidebar-width';
     const DEFAULT_SIDEBAR_WIDTH = 260;
     const MIN_SIDEBAR_WIDTH = 180;
@@ -396,6 +397,7 @@
           statusItem.textContent = 'Ready';
           if (r.ok) renderTree(r.entries, folderPath, fileTreeEl, 0);
           else statusItem.textContent = 'Error: ' + r.error;
+          reinitTerminalToProject(folderPath);
         });
       });
     }
@@ -880,8 +882,7 @@
       if (!collapsed) initTerminal();
     }
 
-    function initTerminal() {
-      if (xtermTerminal) return;
+    function createTerminalUIAndBackend(cwd) {
       const Terminal = window.Terminal;
       const FitAddonCtor = window.FitAddon?.FitAddon || window.FitAddon;
       if (!Terminal || !FitAddonCtor) return;
@@ -896,20 +897,41 @@
       xtermTerminal.open(terminalContainer);
       xtermFitAddon.fit();
 
-      terminalAPI.onData(function (data) {
-        if (xtermTerminal) xtermTerminal.write(data);
-      });
+      if (!terminalDataListenerRegistered) {
+        terminalAPI.onData(function (data) {
+          if (xtermTerminal) xtermTerminal.write(data);
+        });
+        terminalDataListenerRegistered = true;
+      }
       xtermTerminal.onData(function (data) {
         terminalAPI.sendInput(data);
       });
 
-      terminalAPI.create(projectRoot || undefined).then(function (res) {
+      terminalAPI.create(cwd || undefined).then(function (res) {
         if (!res.ok) {
           xtermTerminal.writeln('Terminal error: ' + (res.error || 'Unknown'));
           return;
         }
         xtermFitAddon.fit();
         terminalAPI.resize(xtermTerminal.cols, xtermTerminal.rows);
+      });
+    }
+
+    function initTerminal() {
+      if (xtermTerminal) return;
+      createTerminalUIAndBackend(projectRoot || undefined);
+    }
+
+    function reinitTerminalToProject(folderPath) {
+      if (!folderPath) return;
+      if (!xtermTerminal) return;
+      var term = xtermTerminal;
+      xtermTerminal = null;
+      xtermFitAddon = null;
+      terminalAPI.kill().then(function () {
+        try { term.destroy(); } catch (_) {}
+        terminalContainer.innerHTML = '';
+        createTerminalUIAndBackend(folderPath);
       });
     }
 

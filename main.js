@@ -42,11 +42,13 @@ ipcMain.handle('terminal-create', async (event, cwd) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return { ok: false, error: 'No window' };
   const winId = win.id;
-  if (terminalPtyMap.has(winId)) {
-    return { ok: true };
+  const existing = terminalPtyMap.get(winId);
+  if (existing) {
+    try { existing.kill(); } catch (_) {}
+    terminalPtyMap.delete(winId);
   }
   const shell = process.platform === 'win32' ? process.env.COMSPEC || 'cmd.exe' : (process.env.SHELL || '/bin/sh');
-  const startCwd = cwd && path.isAbsolute(cwd) ? cwd : (cwd ? path.resolve(cwd) : process.cwd());
+  const startCwd = (cwd && String(cwd).trim()) ? path.resolve(cwd) : process.cwd();
   try {
     const ptyProcess = pty.spawn(shell, [], {
       name: 'xterm-256color',
@@ -58,12 +60,23 @@ ipcMain.handle('terminal-create', async (event, cwd) => {
       if (win && !win.isDestroyed()) win.webContents.send('terminal-data', data);
     });
     ptyProcess.onExit(() => {
-      terminalPtyMap.delete(winId);
+      if (terminalPtyMap.get(winId) === ptyProcess) terminalPtyMap.delete(winId);
     });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
   }
+});
+
+ipcMain.handle('terminal-kill', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return;
+  const ptyProcess = terminalPtyMap.get(win.id);
+  if (ptyProcess) {
+    try { ptyProcess.kill(); } catch (_) {}
+    terminalPtyMap.delete(win.id);
+  }
+  return undefined;
 });
 
 ipcMain.on('terminal-input', (event, data) => {

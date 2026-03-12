@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('alexide', {
   deletePath: (targetPath) => ipcRenderer.invoke('delete-path', targetPath),
   terminal: {
     create: (cwd) => ipcRenderer.invoke('terminal-create', cwd || null),
+    kill: () => ipcRenderer.invoke('terminal-kill'),
     onData: (fn) => {
       ipcRenderer.on('terminal-data', (_event, data) => fn(data));
     },
