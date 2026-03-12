@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('alexide', {
     status: (cwd) => ipcRenderer.invoke('git-status', cwd),
     branches: (cwd) => ipcRenderer.invoke('git-branches', cwd),
     checkout: (cwd, branch) => ipcRenderer.invoke('git-checkout', cwd, branch),
+    showIndex: (cwd, filePath) => ipcRenderer.invoke('git-show-index', cwd, filePath),
+    showHead: (cwd, filePath) => ipcRenderer.invoke('git-show-head', cwd, filePath),
     add: (cwd, filePath) => ipcRenderer.invoke('git-add', cwd, filePath),
     addAll: (cwd) => ipcRenderer.invoke('git-add-all', cwd),
     reset: (cwd, filePath) => ipcRenderer.invoke('git-reset', cwd, filePath),
@@ -44,5 +46,8 @@ contextBridge.exposeInMainWorld('alexide', {
     restore: (cwd, filePath) => ipcRenderer.invoke('git-restore', cwd, filePath),
     commit: (cwd, message) => ipcRenderer.invoke('git-commit', cwd, message),
     push: (cwd) => ipcRenderer.invoke('git-push', cwd),
+  },
+  diff: {
+    compute: (oldText, newText) => ipcRenderer.invoke('compute-diff', oldText, newText),
   },
 });

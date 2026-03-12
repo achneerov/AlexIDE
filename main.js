@@ -5,6 +5,7 @@ const pty = require('node-pty');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
+const diff = require('diff');
 
 const iconPath = path.join(__dirname, 'assets', 'icon.png');
 
@@ -402,6 +403,37 @@ ipcMain.handle('git-checkout', async (_event, cwd, branch) => {
   } catch (err) {
     return { ok: false, error: err.message };
   }
+});
+
+ipcMain.handle('git-show-index', async (_event, cwd, filePath) => {
+  if (!cwd || !filePath) return { ok: false, error: 'Missing cwd or path', content: null };
+  const escaped = filePath.replace(/\\/g, '/').replace(/"/g, '\\"').replace(/\$/g, '\\$');
+  try {
+    const { stdout } = await execAsync('git show ":' + escaped + '"', { cwd, maxBuffer: 1024 * 1024 });
+    return { ok: true, content: stdout };
+  } catch (_) {
+    return { ok: true, content: '' };
+  }
+});
+
+ipcMain.handle('git-show-head', async (_event, cwd, filePath) => {
+  if (!cwd || !filePath) return { ok: false, error: 'Missing cwd or path', content: null };
+  const escaped = filePath.replace(/\\/g, '/').replace(/"/g, '\\"').replace(/\$/g, '\\$');
+  try {
+    const { stdout } = await execAsync('git show "HEAD:' + escaped + '"', { cwd, maxBuffer: 1024 * 1024 });
+    return { ok: true, content: stdout };
+  } catch (_) {
+    return { ok: true, content: '' };
+  }
+});
+
+ipcMain.handle('compute-diff', (_event, oldText, newText) => {
+  const chunks = diff.diffLines(oldText || '', newText || '');
+  return chunks.map((c) => ({
+    added: Boolean(c.added),
+    removed: Boolean(c.removed),
+    value: c.value == null ? '' : String(c.value),
+  }));
 });
 
 ipcMain.handle('delete-file', async (_event, cwd, filePath) => {

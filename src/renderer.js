@@ -41,6 +41,9 @@
     const sidebarEl = document.querySelector('.sidebar');
     const sidebarResizer = document.getElementById('sidebar-resizer');
     const monacoRoot = document.getElementById('monaco-root');
+    const monacoDiffRoot = document.getElementById('monaco-diff-root');
+    const diffViewContent = document.getElementById('diff-view-content');
+    var diffEditor = null;
     const fileTreeEl = document.getElementById('file-tree');
     const folderPlaceholder = document.getElementById('folder-placeholder');
     const explorerContextMenu = document.getElementById('explorer-context-menu');
@@ -119,11 +122,42 @@
       editor.onDidChangeModelContent(function () {
         const path = activeFilePath;
         if (path && openTabs.has(path)) {
-          openTabs.get(path).dirty = true;
-          updateTabLabel(path);
+          const tab = openTabs.get(path);
+          if (!tab.isDiff) { tab.dirty = true; updateTabLabel(path); }
         }
       });
       return editor;
+    }
+
+    function renderDiffHtml(chunks) {
+      if (!chunks || !chunks.length) return '<div class="diff-empty">No changes</div>';
+      var html = [];
+      var oldNum = 1;
+      var newNum = 1;
+      for (var i = 0; i < chunks.length; i++) {
+        var c = chunks[i];
+        var added = !!c.added;
+        var removed = !!c.removed;
+        var lines = (c.value || '').split(/\r?\n/);
+        if (lines.length === 1 && lines[0] === '' && (added || removed)) continue;
+        for (var j = 0; j < lines.length; j++) {
+          var line = lines[j];
+          var isLast = j === lines.length - 1;
+          if (isLast && line === '' && lines.length > 1) continue;
+          if (added) {
+            html.push('<div class="diff-line diff-line-added"><span class="diff-num">' + newNum + '</span><span class="diff-sign">+</span><span class="diff-content">' + escapeHtml(line) + '</span></div>');
+            newNum++;
+          } else if (removed) {
+            html.push('<div class="diff-line diff-line-removed"><span class="diff-num">' + oldNum + '</span><span class="diff-sign">−</span><span class="diff-content">' + escapeHtml(line) + '</span></div>');
+            oldNum++;
+          } else {
+            html.push('<div class="diff-line diff-line-unchanged"><span class="diff-num">' + oldNum + '</span><span class="diff-sign"> </span><span class="diff-content">' + escapeHtml(line) + '</span></div>');
+            oldNum++;
+            newNum++;
+          }
+        }
+      }
+      return html.join('');
     }
 
     function updateTabLabel(filePath) {
@@ -147,6 +181,7 @@
         name,
         model,
         dirty: false,
+        isDiff: false,
         el: null,
       };
       openTabs.set(filePath, tab);
@@ -167,6 +202,55 @@
       });
 
       switchToTab(filePath);
+    }
+
+    function addDiffTab(fullPath, relativePath, indexContent, workingContent, source) {
+      var key = 'diff:' + fullPath + ':' + (source || 'staged');
+      if (openTabs.has(key)) {
+        switchToTab(key);
+        return;
+      }
+      var name = (relativePath || fullPath).split(/[/\\]/).pop();
+      var suffix = (source === 'changes') ? ' (working tree)' : ' (index)';
+      var tabLabel = name + suffix;
+      var tab = {
+        filePath: fullPath,
+        name: tabLabel,
+        isDiff: true,
+        diffChunks: null,
+        el: null,
+      };
+      openTabs.set(key, tab);
+
+      var tabEl = document.createElement('div');
+      tabEl.className = 'tab';
+      tabEl.dataset.path = key;
+      tabEl.innerHTML = '<span class="label">' + escapeHtml(tabLabel) + '</span><button type="button" class="close" aria-label="Close">×</button>';
+      tab.el = tabEl;
+      tabsEl.appendChild(tabEl);
+
+      tabEl.querySelector('.close').addEventListener('click', function (e) {
+        e.stopPropagation();
+        closeTab(key);
+      });
+      tabEl.addEventListener('click', function () {
+        switchToTab(key);
+      });
+
+      var diffAPI = window.alexide && window.alexide.diff;
+      if (!diffAPI || !diffAPI.compute) {
+        switchToTab(key);
+        return;
+      }
+      diffAPI.compute(indexContent || '', workingContent || '').then(function (chunks) {
+        tab.diffChunks = chunks;
+        if (activeFilePath === key && diffViewContent) {
+          diffViewContent.innerHTML = renderDiffHtml(chunks);
+        }
+      }).catch(function () {
+        tab.diffChunks = [];
+      });
+      switchToTab(key);
     }
 
     function escapeHtml(s) {
@@ -260,32 +344,50 @@
       });
     }
 
-    function switchToTab(filePath) {
-      const tab = openTabs.get(filePath);
+    function switchToTab(filePathOrKey) {
+      const tab = openTabs.get(filePathOrKey);
       if (!tab) return;
-      createEditor();
-      editor.setModel(tab.model);
-      activeFilePath = filePath;
+      activeFilePath = filePathOrKey;
       document.querySelectorAll('.tab').forEach(function (el) {
-        el.classList.toggle('open', el.dataset.path === filePath);
+        el.classList.toggle('open', el.dataset.path === filePathOrKey);
       });
-      syncExplorerToFile(filePath);
-      const pos = editor.getPosition();
-      if (pos) statusPosition.textContent = 'Ln ' + pos.lineNumber + ', Col ' + pos.column;
+      syncExplorerToFile(tab.filePath);
+      if (tab.isDiff) {
+        if (monacoRoot) monacoRoot.style.display = 'none';
+        if (monacoDiffRoot) monacoDiffRoot.setAttribute('aria-hidden', 'false');
+        if (diffViewContent) {
+          diffViewContent.innerHTML = tab.diffChunks ? renderDiffHtml(tab.diffChunks) : '<div class="diff-loading">Computing diff…</div>';
+        }
+        statusPosition.textContent = 'Ln 1, Col 1';
+      } else {
+        createEditor();
+        if (monacoRoot) monacoRoot.style.display = '';
+        if (monacoDiffRoot) monacoDiffRoot.setAttribute('aria-hidden', 'true');
+        editor.setModel(tab.model);
+        const pos = editor.getPosition();
+        if (pos) statusPosition.textContent = 'Ln ' + pos.lineNumber + ', Col ' + pos.column;
+      }
     }
 
-    function closeTab(filePath) {
-      const tab = openTabs.get(filePath);
+    function closeTab(filePathOrKey) {
+      const tab = openTabs.get(filePathOrKey);
       if (!tab) return;
-      tab.model.dispose();
+      if (!tab.isDiff) {
+        tab.model.dispose();
+      }
       if (tab.el && tab.el.parentNode) tab.el.parentNode.removeChild(tab.el);
-      openTabs.delete(filePath);
-      if (activeFilePath === filePath) {
-        const next = openTabs.keys().next().value;
+      openTabs.delete(filePathOrKey);
+      if (activeFilePath === filePathOrKey) {
+        var next = null;
+        openTabs.forEach(function (_t, k) { if (!next) next = k; });
         if (next) switchToTab(next);
         else {
           activeFilePath = null;
+          if (monacoRoot) monacoRoot.style.display = '';
+          if (monacoDiffRoot) monacoDiffRoot.setAttribute('aria-hidden', 'true');
+          createEditor();
           editor.setModel(window.monaco.editor.createModel('', 'plaintext'));
+          statusPosition.textContent = 'Ln 1, Col 1';
         }
       }
     }
@@ -295,6 +397,38 @@
         if (res.ok) addTab(filePath, res.content, name);
         else {}
       });
+    }
+
+    function openDiffForFile(relativePath, source) {
+      if (!projectRoot || !gitAPI) return;
+      var relNorm = (relativePath || '').replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\//, '');
+      var fullPath = (projectRoot.replace(/\\/g, '/') + '/' + relNorm).replace(/\/+/g, '/');
+      var key = 'diff:' + fullPath + ':' + (source || 'staged');
+      if (openTabs.has(key)) {
+        switchToTab(key);
+        return;
+      }
+      var isStaged = source === 'staged';
+      var promise = isStaged
+        ? Promise.all([
+            gitAPI.showHead(projectRoot, relNorm),
+            gitAPI.showIndex(projectRoot, relNorm),
+          ]).then(function (results) {
+            var oldContent = results[0].ok ? (results[0].content || '') : '';
+            var newContent = results[1].ok ? (results[1].content || '') : '';
+            return { oldContent: oldContent, newContent: newContent };
+          })
+        : Promise.all([
+            gitAPI.showIndex(projectRoot, relNorm),
+            readFile(fullPath),
+          ]).then(function (results) {
+            var oldContent = results[0].ok ? (results[0].content || '') : '';
+            var newContent = results[1].ok ? (results[1].content || '') : '';
+            return { oldContent: oldContent, newContent: newContent };
+          });
+      promise.then(function (data) {
+        addDiffTab(fullPath, relNorm, data.oldContent, data.newContent, source || 'staged');
+      }).catch(function () {});
     }
 
     function saveCurrent() {
@@ -595,13 +729,14 @@
       return span;
     }
 
-    function renderGitFileRow(filePath, label, actionText, onAction, actionIcon, undoText, onUndo) {
+    function renderGitFileRow(filePath, label, actionText, onAction, actionIcon, undoText, onUndo, onOpenDiff) {
       const row = document.createElement('div');
       row.className = 'git-file-row';
       const name = document.createElement('span');
       name.className = 'name';
       name.textContent = label || filePath.split(/[/\\]/).pop();
       name.title = filePath;
+      if (onOpenDiff) name.classList.add('git-file-name-clickable');
       const actions = document.createElement('span');
       actions.className = 'git-file-actions';
       const btn = document.createElement('button');
@@ -632,6 +767,14 @@
       }
       row.appendChild(name);
       row.appendChild(actions);
+      if (onOpenDiff && typeof onOpenDiff === 'function') {
+        row.classList.add('git-file-row-open-diff');
+        row.addEventListener('click', function (e) {
+          if (e.target.closest('.git-file-actions')) return;
+          e.preventDefault();
+          onOpenDiff(filePath);
+        });
+      }
       return row;
     }
 
@@ -683,7 +826,7 @@
         staged.forEach(function (item) {
           gitStagedList.appendChild(renderGitFileRow(item.path, item.path, 'Unstage', function (p) {
             gitAPI.reset(projectRoot, p).then(function () { refreshGitPanel(); });
-          }, 'undo'));
+          }, 'undo', undefined, undefined, function (p) { openDiffForFile(p, 'staged'); }));
         });
 
         const showPendingBtns = unstaged.length > 0;
@@ -718,7 +861,7 @@
           };
           gitPendingList.appendChild(renderGitFileRow(item.path, item.path, 'Stage', function (p) {
             gitAPI.add(projectRoot, p).then(function () { refreshGitPanel(); });
-          }, 'add', 'Undo', onUndo));
+          }, 'add', 'Undo', onUndo, function (p) { openDiffForFile(p, 'changes'); }));
         });
         refreshBranchSwitcher();
       });
