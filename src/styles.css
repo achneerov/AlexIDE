@@ -5,7 +5,8 @@
   --bg-sidebar: #252526;
   --bg-editor: #1e1e1e;
   --bg-tabs: #252526;
-  --bg-tab-active: #1e1e1e;
+  --bg-tab-inactive: #1e1e1e;
+  --bg-tab-active: #2d2d2d;
   --bg-status: #007acc;
   --fg-titlebar: #cccccc;
   --fg-sidebar: #cccccc;
@@ -231,6 +232,10 @@ html, body {
   background: rgba(255, 255, 255, 0.06);
 }
 
+.tree-item-row.active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .tree-chevron {
   width: 10px;
   height: 16px;
@@ -306,13 +311,18 @@ html, body {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--bg-tab-active);
+  background: var(--bg-tab-inactive);
   border-right: 1px solid var(--border);
-  color: var(--fg-tab-active);
+  color: var(--fg-tab);
   cursor: pointer;
   font-size: 13px;
   max-width: 180px;
   min-width: 80px;
+}
+
+.tab.open {
+  background: var(--bg-tab-active);
+  color: var(--fg-tab-active);
 }
 
 .tab .label {

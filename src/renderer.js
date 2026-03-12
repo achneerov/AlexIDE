@@ -157,6 +157,83 @@
         '<svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/></svg></span>';
     }
 
+    function normPath(p) {
+      return (p || '').replace(/\\/g, '/');
+    }
+
+    function expandFolderNode(wrap) {
+      if (wrap.classList.contains('open') && wrap._childNodes) {
+        wrap._childNodes.forEach(function (n) { n.style.display = ''; });
+        return Promise.resolve();
+      }
+      if (wrap._childNodes) {
+        wrap.classList.add('open');
+        const chevronEl = wrap.querySelector('.tree-chevron');
+        if (chevronEl) chevronEl.classList.add('open');
+        wrap._childNodes.forEach(function (n) { n.style.display = ''; });
+        return Promise.resolve();
+      }
+      wrap.classList.add('open');
+      const chevronEl = wrap.querySelector('.tree-chevron');
+      if (chevronEl) chevronEl.classList.add('open');
+      return listDir(wrap.dataset.path).then(function (r) {
+        if (!r.ok) return;
+        wrap._childNodes = [];
+        let insertAfter = wrap;
+        const depth = parseInt(wrap.dataset.depth, 10) + 1;
+        r.entries.forEach(function (childEntry) {
+          insertAfter = createTreeItem(childEntry, depth, fileTreeEl, insertAfter);
+          wrap._childNodes.push(insertAfter);
+        });
+      });
+    }
+
+    function expandAncestorsOf(targetPath) {
+      if (!projectRoot || !fileTreeEl) return Promise.resolve();
+      const target = normPath(targetPath);
+      const root = normPath(projectRoot);
+      let current = target;
+      const ancestors = [];
+      while (current && current !== root) {
+        const slash = current.lastIndexOf('/');
+        if (slash <= 0) break;
+        current = current.slice(0, slash);
+        ancestors.unshift(current);
+      }
+      let p = Promise.resolve();
+      ancestors.forEach(function (ancestorPath) {
+        p = p.then(function () {
+          const items = fileTreeEl.querySelectorAll('.tree-item');
+          for (let i = 0; i < items.length; i++) {
+            if (normPath(items[i].dataset.path) !== ancestorPath) continue;
+            if (items[i].dataset.isDir !== 'true') continue;
+            return expandFolderNode(items[i]);
+          }
+        });
+      });
+      return p;
+    }
+
+    function syncExplorerToFile(filePath) {
+      if (!filePath || !fileTreeEl || fileTreeEl.style.display === 'none') return;
+      fileTreeEl.querySelectorAll('.tree-item-row.active').forEach(function (row) {
+        row.classList.remove('active');
+      });
+      expandAncestorsOf(filePath).then(function () {
+        const items = fileTreeEl.querySelectorAll('.tree-item');
+        const normalized = normPath(filePath);
+        for (let i = 0; i < items.length; i++) {
+          if (normPath(items[i].dataset.path) !== normalized) continue;
+          const row = items[i].querySelector('.tree-item-row');
+          if (row) {
+            row.classList.add('active');
+            row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+          break;
+        }
+      });
+    }
+
     function switchToTab(filePath) {
       const tab = openTabs.get(filePath);
       if (!tab) return;
@@ -166,6 +243,7 @@
       document.querySelectorAll('.tab').forEach(function (el) {
         el.classList.toggle('open', el.dataset.path === filePath);
       });
+      syncExplorerToFile(filePath);
       const pos = editor.getPosition();
       if (pos) statusPosition.textContent = 'Ln ' + pos.lineNumber + ', Col ' + pos.column;
     }
