@@ -153,7 +153,19 @@ function buildAppMenu() {
       ],
     },
     { role: 'editMenu' },
-    { role: 'viewMenu' },
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Toggle Terminal',
+          accelerator: 'CmdOrCtrl+J',
+          click: () => {
+            const win = BrowserWindow.getFocusedWindow();
+            if (win && !win.isDestroyed()) win.webContents.send('menu-toggle-terminal');
+          },
+        },
+      ],
+    },
     { role: 'windowMenu' },
   ];
   const menu = Menu.buildFromTemplate(template);
@@ -354,6 +366,38 @@ ipcMain.handle('git-restore', async (_event, cwd, filePath) => {
   try {
     const escaped = filePath.replace(/\\/g, '/').includes(' ') ? `"${filePath.replace(/"/g, '\\"')}"` : filePath;
     await execAsync('git checkout -- ' + escaped, { cwd, maxBuffer: 4096 });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('git-branches', async (_event, cwd) => {
+  if (!cwd) return { ok: false, error: 'No folder', branches: [], current: null };
+  try {
+    await execAsync('git rev-parse --is-inside-work-tree', { cwd, maxBuffer: 4096 });
+  } catch {
+    return { ok: true, isRepo: false, branches: [], current: null };
+  }
+  try {
+    const { stdout: branchOut } = await execAsync('git branch --no-color', { cwd, maxBuffer: 65536 });
+    const branches = branchOut.split(/\r?\n/).map((line) => line.replace(/^\*?\s*/, '').trim()).filter(Boolean);
+    let current = null;
+    try {
+      const { stdout: headOut } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd, maxBuffer: 4096 });
+      current = headOut.trim() || null;
+    } catch (_) {}
+    return { ok: true, isRepo: true, branches, current };
+  } catch (err) {
+    return { ok: false, error: err.message, branches: [], current: null };
+  }
+});
+
+ipcMain.handle('git-checkout', async (_event, cwd, branch) => {
+  if (!cwd || !branch || !branch.trim()) return { ok: false, error: 'Missing cwd or branch' };
+  try {
+    const b = branch.trim().replace(/"/g, '\\"').replace(/\$/g, '\\$');
+    await execAsync('git checkout "' + b + '"', { cwd, maxBuffer: 4096 });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };

@@ -89,9 +89,10 @@
 
     <footer class="status-bar">
       <div class="status-left">
-        <span id="status-item" class="status-item">Ready</span>
-        <span id="status-encoding" class="status-item">UTF-8</span>
-        <button type="button" id="status-terminal-btn" class="status-terminal-btn" title="Toggle Terminal">Terminal</button>
+        <div class="branch-switcher" id="branch-switcher">
+          <button type="button" class="branch-switcher-trigger" id="branch-switcher-trigger" aria-haspopup="listbox" aria-expanded="false">No branch</button>
+          <div class="branch-switcher-dropdown" id="branch-switcher-dropdown" role="listbox" aria-hidden="true"></div>
+        </div>
       </div>
       <div class="status-right">
         <span id="status-position" class="status-item">Ln 1, Col 1</span>

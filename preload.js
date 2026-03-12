@@ -1,8 +1,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 let onMenuOpenFolder = null;
+let onMenuToggleTerminal = null;
 ipcRenderer.on('menu-open-folder', () => {
   if (typeof onMenuOpenFolder === 'function') onMenuOpenFolder();
+});
+ipcRenderer.on('menu-toggle-terminal', () => {
+  if (typeof onMenuToggleTerminal === 'function') onMenuToggleTerminal();
 });
 
 contextBridge.exposeInMainWorld('alexide', {
@@ -10,6 +14,7 @@ contextBridge.exposeInMainWorld('alexide', {
   getIconDataUrl: () => ipcRenderer.invoke('get-icon-data-url'),
   openFolder: () => ipcRenderer.invoke('open-folder'),
   onMenuOpenFolder: (fn) => { onMenuOpenFolder = fn; },
+  onMenuToggleTerminal: (fn) => { onMenuToggleTerminal = fn; },
   listDir: (dirPath) => ipcRenderer.invoke('list-dir', dirPath),
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
   writeFile: (filePath, content) => ipcRenderer.invoke('write-file', filePath, content),
@@ -30,6 +35,8 @@ contextBridge.exposeInMainWorld('alexide', {
   },
   git: {
     status: (cwd) => ipcRenderer.invoke('git-status', cwd),
+    branches: (cwd) => ipcRenderer.invoke('git-branches', cwd),
+    checkout: (cwd, branch) => ipcRenderer.invoke('git-checkout', cwd, branch),
     add: (cwd, filePath) => ipcRenderer.invoke('git-add', cwd, filePath),
     addAll: (cwd) => ipcRenderer.invoke('git-add-all', cwd),
     reset: (cwd, filePath) => ipcRenderer.invoke('git-reset', cwd, filePath),

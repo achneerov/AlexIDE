@@ -61,13 +61,13 @@
     const gitStageAllBtn = document.getElementById('git-stage-all-btn');
     const gitUndoAllBtn = document.getElementById('git-undo-all-btn');
     const tabsEl = document.getElementById('tabs');
-    const statusItem = document.getElementById('status-item');
     const statusPosition = document.getElementById('status-position');
     const ideEl = document.querySelector('.ide');
     const terminalPanel = document.getElementById('terminal-panel');
     const panelResizer = document.getElementById('panel-resizer');
     const panelToggle = document.getElementById('panel-toggle');
-    const statusTerminalBtn = document.getElementById('status-terminal-btn');
+    const branchSwitcherTrigger = document.getElementById('branch-switcher-trigger');
+    const branchSwitcherDropdown = document.getElementById('branch-switcher-dropdown');
     const terminalView = document.getElementById('terminal-view');
     const terminalTabsEl = document.getElementById('terminal-tabs');
     const panelAddTerminalBtn = document.getElementById('panel-add-terminal');
@@ -291,11 +291,9 @@
     }
 
     function openFile(filePath, name) {
-      statusItem.textContent = 'Loading…';
       readFile(filePath).then(function (res) {
-        statusItem.textContent = 'Ready';
         if (res.ok) addTab(filePath, res.content, name);
-        else statusItem.textContent = 'Error: ' + res.error;
+        else {}
       });
     }
 
@@ -308,9 +306,8 @@
         if (res.ok) {
           tab.dirty = false;
           updateTabLabel(activeFilePath);
-          statusItem.textContent = 'Saved';
           if (sidebarPanelGit.style.display !== 'none') refreshGitPanel();
-        } else statusItem.textContent = 'Save error: ' + res.error;
+        } else {}
       });
     }
 
@@ -394,12 +391,11 @@
         folderPlaceholder.style.display = 'none';
         fileTreeEl.style.display = 'block';
         fileTreeEl.innerHTML = '';
-        statusItem.textContent = 'Loading…';
         listDir(folderPath).then(function (r) {
-          statusItem.textContent = 'Ready';
           if (r.ok) renderTree(r.entries, folderPath, fileTreeEl, 0);
-          else statusItem.textContent = 'Error: ' + r.error;
+          else {}
           reinitTerminalToProject(folderPath);
+          refreshBranchSwitcher();
         });
       });
     }
@@ -467,7 +463,7 @@
         api(parentDir, name).then(function (res) {
           removeNewItemInput();
           if (res.ok) refreshFileTree();
-          else statusItem.textContent = 'Error: ' + (res.error || '');
+          else {}
         });
       }
 
@@ -531,7 +527,7 @@
             if (res.ok) {
               if (openTabs.has(targetPath)) closeTab(targetPath);
               refreshFileTree();
-            } else statusItem.textContent = 'Error: ' + (res.error || '');
+            } else {}
           });
         });
         addItem('Delete', function () {
@@ -547,7 +543,7 @@
               });
               toClose.forEach(function (path) { closeTab(path); });
               refreshFileTree();
-            } else statusItem.textContent = 'Error: ' + (res.error || '');
+            } else {}
           });
         });
       }
@@ -647,6 +643,7 @@
         gitPanelContent.style.display = 'none';
         gitCommitBtn.disabled = true;
         gitPushBtn.disabled = true;
+        refreshBranchSwitcher();
         return;
       }
       gitAPI.status(projectRoot).then(function (res) {
@@ -656,6 +653,7 @@
           gitPanelContent.style.display = 'none';
           gitCommitBtn.disabled = true;
           gitPushBtn.disabled = true;
+          refreshBranchSwitcher();
           return;
         }
         if (!res.isRepo) {
@@ -664,6 +662,7 @@
           gitPanelContent.style.display = 'none';
           gitCommitBtn.disabled = true;
           gitPushBtn.disabled = true;
+          refreshBranchSwitcher();
           return;
         }
         gitChangesPlaceholder.style.display = 'none';
@@ -701,7 +700,7 @@
                   const fullPath = (projectRoot.replace(/\\/g, '/') + '/' + p.replace(/\\/g, '/')).replace(/\/+/g, '/');
                   if (openTabs.has(fullPath)) closeTab(fullPath);
                   refreshGitPanel();
-                } else statusItem.textContent = 'Delete failed: ' + (res.error || '');
+                } else {}
               });
             } else {
               gitAPI.restore(projectRoot, p).then(function (res) {
@@ -713,7 +712,7 @@
                     });
                   }
                   refreshGitPanel();
-                } else statusItem.textContent = 'Restore failed: ' + (res.error || '');
+                } else {}
               });
             }
           };
@@ -721,6 +720,7 @@
             gitAPI.add(projectRoot, p).then(function () { refreshGitPanel(); });
           }, 'add', 'Undo', onUndo));
         });
+        refreshBranchSwitcher();
       });
     }
 
@@ -729,7 +729,7 @@
       if (!projectRoot || !gitAPI) return;
       gitAPI.resetAll(projectRoot).then(function (res) {
         if (res.ok) refreshGitPanel();
-        else statusItem.textContent = 'Unstage all failed: ' + (res.error || '');
+        else {}
       });
     });
 
@@ -738,7 +738,7 @@
       if (!projectRoot || !gitAPI) return;
       gitAPI.addAll(projectRoot).then(function (res) {
         if (res.ok) refreshGitPanel();
-        else statusItem.textContent = 'Stage all failed: ' + (res.error || '');
+        else {}
       });
     });
 
@@ -789,30 +789,25 @@
       if (!projectRoot || !gitAPI) return;
       const msg = gitCommitMessage.value.trim();
       if (!msg) {
-        statusItem.textContent = 'Enter a commit message.';
         return;
       }
-      statusItem.textContent = 'Committing…';
       gitAPI.commit(projectRoot, msg).then(function (res) {
         if (res.ok) {
           gitCommitMessage.value = '';
-          statusItem.textContent = 'Committed';
           refreshGitPanel();
         } else {
-          statusItem.textContent = 'Commit failed: ' + (res.error || '');
+          {}
         }
       });
     });
 
     gitPushBtn.addEventListener('click', function () {
       if (!projectRoot || !gitAPI) return;
-      statusItem.textContent = 'Pushing…';
       gitAPI.push(projectRoot).then(function (res) {
         if (res.ok) {
-          statusItem.textContent = 'Pushed';
           refreshGitPanel();
         } else {
-          statusItem.textContent = 'Push failed: ' + (res.error || '');
+          {}
         }
       });
     });
@@ -1046,8 +1041,79 @@
     if (!collapsedStored) initTerminal();
 
     panelToggle.addEventListener('click', togglePanel);
-    statusTerminalBtn.addEventListener('click', togglePanel);
+    if (window.alexide.onMenuToggleTerminal) window.alexide.onMenuToggleTerminal(togglePanel);
     if (panelAddTerminalBtn) panelAddTerminalBtn.addEventListener('click', addNewTerminal);
+
+    function refreshBranchSwitcher() {
+      if (!branchSwitcherTrigger || !branchSwitcherDropdown) return;
+      if (!projectRoot) {
+        branchSwitcherTrigger.textContent = 'No branch';
+        branchSwitcherDropdown.innerHTML = '';
+        return;
+      }
+      gitAPI.branches(projectRoot).then(function (res) {
+        if (!res.ok || !res.isRepo) {
+          branchSwitcherTrigger.textContent = 'No branch';
+          branchSwitcherDropdown.innerHTML = '';
+          return;
+        }
+        var current = res.current || 'No branch';
+        branchSwitcherTrigger.textContent = current + ' ▼';
+        branchSwitcherTrigger.setAttribute('aria-label', 'Current branch: ' + current);
+        branchSwitcherDropdown.innerHTML = '';
+        res.branches.forEach(function (branch) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'branch-switcher-option' + (branch === current ? ' current' : '');
+          btn.textContent = branch;
+          btn.setAttribute('role', 'option');
+          btn.addEventListener('click', function () {
+            if (branch === current) { closeBranchDropdown(); return; }
+            gitAPI.checkout(projectRoot, branch).then(function (checkoutRes) {
+              closeBranchDropdown();
+              if (checkoutRes.ok) {
+                refreshBranchSwitcher();
+                refreshGitPanel();
+              }
+            });
+          });
+          branchSwitcherDropdown.appendChild(btn);
+        });
+      });
+    }
+    function closeBranchDropdown() {
+      if (branchSwitcherDropdown) {
+        branchSwitcherDropdown.setAttribute('aria-hidden', 'true');
+        branchSwitcherTrigger.setAttribute('aria-expanded', 'false');
+      }
+    }
+    function openBranchDropdown() {
+      if (!branchSwitcherTrigger || !branchSwitcherDropdown) return;
+      var isOpen = branchSwitcherDropdown.getAttribute('aria-hidden') !== 'true';
+      if (isOpen) {
+        closeBranchDropdown();
+        return;
+      }
+      branchSwitcherDropdown.setAttribute('aria-hidden', 'false');
+      branchSwitcherTrigger.setAttribute('aria-expanded', 'true');
+      document.addEventListener('click', function outside(e) {
+        if (!branchSwitcherTrigger.contains(e.target) && !branchSwitcherDropdown.contains(e.target)) {
+          closeBranchDropdown();
+          document.removeEventListener('click', outside);
+        }
+      });
+    }
+    if (branchSwitcherTrigger) branchSwitcherTrigger.addEventListener('click', function (e) {
+      e.stopPropagation();
+      openBranchDropdown();
+    });
+    if (branchSwitcherDropdown) branchSwitcherDropdown.addEventListener('click', function (e) { e.stopPropagation(); });
+    window.addEventListener('focus', function () {
+      refreshBranchSwitcher();
+    });
+    setInterval(function () {
+      if (projectRoot) refreshBranchSwitcher();
+    }, 500);
 
     panelResizer.addEventListener('mousedown', function (e) {
       if (e.button !== 0) return;
