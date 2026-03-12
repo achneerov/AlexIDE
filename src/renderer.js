@@ -191,13 +191,13 @@
       }
       if (wrap._childNodes) {
         wrap.classList.add('open');
-        const chevronEl = wrap.querySelector('.tree-chevron');
+        const chevronEl = wrap.querySelector('.tree-chevron-cell .tree-chevron');
         if (chevronEl) chevronEl.classList.add('open');
         wrap._childNodes.forEach(function (n) { n.style.display = ''; });
         return Promise.resolve();
       }
       wrap.classList.add('open');
-      const chevronEl = wrap.querySelector('.tree-chevron');
+      const chevronEl = wrap.querySelector('.tree-chevron-cell .tree-chevron');
       if (chevronEl) chevronEl.classList.add('open');
       return listDir(wrap.dataset.path).then(function (r) {
         if (!r.ok) return;
@@ -322,11 +322,11 @@
       row.className = 'tree-item-row';
       row.style.paddingLeft = (depth * 16 + 6) + 'px';
       const isDir = entry.isDirectory;
-      const chevron = isDir
-        ? '<span class="tree-chevron" aria-hidden="true">&gt;</span>'
-        : '<span class="tree-chevron tree-chevron-spacer" aria-hidden="true"></span>';
-        const icon = isDir ? '' : getFileIcon(entry);
-      row.innerHTML = chevron + icon + '<span class="name">' + escapeHtml(entry.name) + '</span>';
+      const slot1 = '<span class="tree-chevron tree-chevron-spacer" aria-hidden="true"></span>';
+      const slot2 = isDir
+        ? '<span class="tree-chevron-cell"><span class="tree-chevron" aria-hidden="true">&gt;</span></span>'
+        : getFileIcon(entry);
+      row.innerHTML = slot1 + slot2 + '<span class="name">' + escapeHtml(entry.name) + '</span>';
       wrap.appendChild(row);
 
       if (insertAfterNode) {
@@ -340,7 +340,7 @@
           node.style.display = 'none';
           if (node.classList && node.classList.contains('tree-item-dir') && node._childNodes && node._childNodes.length) {
             node.classList.remove('open');
-            const chev = node.querySelector('.tree-chevron');
+            const chev = node.querySelector('.tree-chevron-cell .tree-chevron');
             if (chev) chev.classList.remove('open');
             node._childNodes.forEach(collapseFolder);
           }
@@ -348,7 +348,7 @@
         row.addEventListener('click', function (e) {
           e.stopPropagation();
           const open = wrap.classList.toggle('open');
-          const chevronEl = wrap.querySelector('.tree-chevron');
+          const chevronEl = wrap.querySelector('.tree-chevron-cell .tree-chevron');
           if (chevronEl) chevronEl.classList.toggle('open', open);
           if (wrap._childNodes) {
             if (open) {
