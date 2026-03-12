@@ -29,9 +29,38 @@
           </div>
           <div id="sidebar-panel-git" class="sidebar-panel" style="display: none;">
             <div id="git-changes-placeholder" class="placeholder">
-              <p>Git changes will appear here when a folder is opened.</p>
+              <p>Open a folder to use Git.</p>
             </div>
-            <div id="git-changes-list" class="file-tree" style="display: none;"></div>
+            <div id="git-panel-content" class="git-panel-content" style="display: none;">
+              <textarea id="git-commit-message" class="git-message-input" placeholder="Commit message" rows="2"></textarea>
+              <div class="git-actions">
+                <button type="button" id="git-commit-btn" class="git-btn git-btn-commit">Commit</button>
+                <button type="button" id="git-push-btn" class="git-btn git-btn-push">Push</button>
+              </div>
+              <div class="git-section">
+                <div class="git-section-header-row">
+                  <button type="button" class="git-section-header" id="git-staged-header" aria-expanded="true">
+                    <span class="git-section-chevron">▼</span>
+                    <span class="git-section-title">Staged changes</span>
+                    <span class="git-section-count" id="git-staged-count">0</span>
+                  </button>
+                  <button type="button" class="git-toolbar-btn git-btn-icon" id="git-unstage-all-btn" style="display: none;" title="Unstage all" aria-label="Unstage all"><span class="git-icon" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M25 38c-5.1 0-9.7-3-11.8-7.6l1.8-.8c1.8 3.9 5.7 6.4 10 6.4 6.1 0 11-4.9 11-11s-4.9-11-11-11c-4.6 0-8.5 2.8-10.1 7.3l-1.9-.7c1.9-5.2 6.6-8.6 12-8.6 7.2 0 13 5.8 13 13s-5.8 13-13 13z"/><path d="M20 22h-8v-8h2v6h6z"/></svg></span></button>
+                </div>
+                <div class="git-section-body" id="git-staged-list"></div>
+              </div>
+              <div class="git-section">
+                <div class="git-section-header-row">
+                  <button type="button" class="git-section-header" id="git-pending-header" aria-expanded="true">
+                    <span class="git-section-chevron">▼</span>
+                    <span class="git-section-title">Changes</span>
+                    <span class="git-section-count" id="git-pending-count">0</span>
+                  </button>
+                  <button type="button" class="git-toolbar-btn git-btn-icon" id="git-stage-all-btn" style="display: none;" title="Stage all" aria-label="Stage all"><span class="git-icon" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12"><path fill="currentColor" d="M6 2v3h3v2H6v3H4V7H1V5h3V2z"/></svg></span></button>
+                  <button type="button" class="git-toolbar-btn git-btn-icon" id="git-undo-all-btn" style="display: none;" title="Undo all" aria-label="Undo all"><span class="git-icon" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M25 38c-5.1 0-9.7-3-11.8-7.6l1.8-.8c1.8 3.9 5.7 6.4 10 6.4 6.1 0 11-4.9 11-11s-4.9-11-11-11c-4.6 0-8.5 2.8-10.1 7.3l-1.9-.7c1.9-5.2 6.6-8.6 12-8.6 7.2 0 13 5.8 13 13s-5.8 13-13 13z"/><path d="M20 22h-8v-8h2v6h6z"/></svg></span></button>
+                </div>
+                <div class="git-section-body" id="git-pending-list"></div>
+              </div>
+            </div>
           </div>
         </div>
       </aside>

@@ -32,7 +32,7 @@
   });
 
   function initApp() {
-    const { openFolder, listDir, readFile, writeFile, terminal: terminalAPI } = window.alexide;
+    const { openFolder, listDir, readFile, writeFile, terminal: terminalAPI, git: gitAPI } = window.alexide;
     let projectRoot = null;
     let editor = null;
     const openTabs = new Map();
@@ -45,6 +45,20 @@
     const folderPlaceholder = document.getElementById('folder-placeholder');
     const sidebarPanelExplorer = document.getElementById('sidebar-panel-explorer');
     const sidebarPanelGit = document.getElementById('sidebar-panel-git');
+    const gitChangesPlaceholder = document.getElementById('git-changes-placeholder');
+    const gitPanelContent = document.getElementById('git-panel-content');
+    const gitCommitMessage = document.getElementById('git-commit-message');
+    const gitCommitBtn = document.getElementById('git-commit-btn');
+    const gitPushBtn = document.getElementById('git-push-btn');
+    const gitStagedList = document.getElementById('git-staged-list');
+    const gitPendingList = document.getElementById('git-pending-list');
+    const gitStagedCount = document.getElementById('git-staged-count');
+    const gitPendingCount = document.getElementById('git-pending-count');
+    const gitStagedHeader = document.getElementById('git-staged-header');
+    const gitUnstageAllBtn = document.getElementById('git-unstage-all-btn');
+    const gitPendingHeader = document.getElementById('git-pending-header');
+    const gitStageAllBtn = document.getElementById('git-stage-all-btn');
+    const gitUndoAllBtn = document.getElementById('git-undo-all-btn');
     const tabsEl = document.getElementById('tabs');
     const statusItem = document.getElementById('status-item');
     const statusPosition = document.getElementById('status-position');
@@ -291,6 +305,7 @@
           tab.dirty = false;
           updateTabLabel(activeFilePath);
           statusItem.textContent = 'Saved';
+          if (sidebarPanelGit.style.display !== 'none') refreshGitPanel();
         } else statusItem.textContent = 'Save error: ' + res.error;
       });
     }
@@ -395,9 +410,243 @@
       document.getElementById('sidebar-tab-git').setAttribute('aria-pressed', !isExplorer ? 'true' : 'false');
       sidebarPanelExplorer.style.display = isExplorer ? '' : 'none';
       sidebarPanelGit.style.display = isExplorer ? 'none' : '';
+      if (!isExplorer) refreshGitPanel();
     }
     document.getElementById('sidebar-tab-explorer').addEventListener('click', function () { switchSidebarTab('explorer'); });
     document.getElementById('sidebar-tab-git').addEventListener('click', function () { switchSidebarTab('git'); });
+
+    function gitIconAdd() {
+      const span = document.createElement('span');
+      span.className = 'git-icon';
+      span.setAttribute('aria-hidden', 'true');
+      span.innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12"><path fill="currentColor" d="M6 2v3h3v2H6v3H4V7H1V5h3V2z"/></svg>';
+      return span;
+    }
+    function gitIconUndo() {
+      const span = document.createElement('span');
+      span.className = 'git-icon';
+      span.setAttribute('aria-hidden', 'true');
+      span.innerHTML = '<svg width="12" height="12" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M25 38c-5.1 0-9.7-3-11.8-7.6l1.8-.8c1.8 3.9 5.7 6.4 10 6.4 6.1 0 11-4.9 11-11s-4.9-11-11-11c-4.6 0-8.5 2.8-10.1 7.3l-1.9-.7c1.9-5.2 6.6-8.6 12-8.6 7.2 0 13 5.8 13 13s-5.8 13-13 13z"/><path d="M20 22h-8v-8h2v6h6z"/></svg>';
+      return span;
+    }
+
+    function renderGitFileRow(filePath, label, actionText, onAction, actionIcon, undoText, onUndo) {
+      const row = document.createElement('div');
+      row.className = 'git-file-row';
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = label || filePath.split(/[/\\]/).pop();
+      name.title = filePath;
+      const actions = document.createElement('span');
+      actions.className = 'git-file-actions';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'action' + (actionIcon ? ' action-icon' : '');
+      btn.setAttribute('title', actionText);
+      btn.setAttribute('aria-label', actionText);
+      if (actionIcon === 'add') btn.appendChild(gitIconAdd());
+      else if (actionIcon === 'undo') btn.appendChild(gitIconUndo());
+      else btn.textContent = actionText;
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        onAction(filePath);
+      });
+      actions.appendChild(btn);
+      if (onUndo && typeof onUndo === 'function') {
+        const undoBtn = document.createElement('button');
+        undoBtn.type = 'button';
+        undoBtn.className = 'action action-undo action-icon';
+        undoBtn.setAttribute('title', undoText || 'Undo');
+        undoBtn.setAttribute('aria-label', undoText || 'Undo');
+        undoBtn.appendChild(gitIconUndo());
+        undoBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          onUndo(filePath);
+        });
+        actions.appendChild(undoBtn);
+      }
+      row.appendChild(name);
+      row.appendChild(actions);
+      return row;
+    }
+
+    function refreshGitPanel() {
+      if (!gitAPI) return;
+      if (!projectRoot) {
+        gitChangesPlaceholder.style.display = '';
+        gitChangesPlaceholder.querySelector('p').textContent = 'Open a folder to use Git.';
+        gitPanelContent.style.display = 'none';
+        gitCommitBtn.disabled = true;
+        gitPushBtn.disabled = true;
+        return;
+      }
+      gitAPI.status(projectRoot).then(function (res) {
+        if (!res.ok) {
+          gitChangesPlaceholder.style.display = '';
+          gitChangesPlaceholder.querySelector('p').textContent = 'Error: ' + (res.error || 'Unknown');
+          gitPanelContent.style.display = 'none';
+          gitCommitBtn.disabled = true;
+          gitPushBtn.disabled = true;
+          return;
+        }
+        if (!res.isRepo) {
+          gitChangesPlaceholder.style.display = '';
+          gitChangesPlaceholder.querySelector('p').textContent = 'Not a git repository.';
+          gitPanelContent.style.display = 'none';
+          gitCommitBtn.disabled = true;
+          gitPushBtn.disabled = true;
+          return;
+        }
+        gitChangesPlaceholder.style.display = 'none';
+        gitPanelContent.style.display = '';
+
+        const staged = res.staged || [];
+        const unstaged = res.unstaged || [];
+        const aheadCount = res.aheadCount != null ? res.aheadCount : 0;
+        gitStagedCount.textContent = String(staged.length);
+        gitPendingCount.textContent = String(unstaged.length);
+
+        gitCommitBtn.disabled = staged.length === 0;
+        gitPushBtn.disabled = aheadCount === 0;
+
+        gitUnstageAllBtn.style.display = staged.length > 0 ? '' : 'none';
+
+        gitStagedList.innerHTML = '';
+        staged.forEach(function (item) {
+          gitStagedList.appendChild(renderGitFileRow(item.path, item.path, 'Unstage', function (p) {
+            gitAPI.reset(projectRoot, p).then(function () { refreshGitPanel(); });
+          }, 'undo'));
+        });
+
+        const showPendingBtns = unstaged.length > 0;
+        gitStageAllBtn.style.display = showPendingBtns ? '' : 'none';
+        gitUndoAllBtn.style.display = showPendingBtns ? '' : 'none';
+
+        gitPendingList.innerHTML = '';
+        unstaged.forEach(function (item) {
+          const isNew = item.status === '?';
+          const onUndo = function (p) {
+            if (isNew) {
+              window.alexide.deleteFile(projectRoot, p).then(function (res) {
+                if (res.ok) {
+                  const fullPath = (projectRoot.replace(/\\/g, '/') + '/' + p.replace(/\\/g, '/')).replace(/\/+/g, '/');
+                  if (openTabs.has(fullPath)) closeTab(fullPath);
+                  refreshGitPanel();
+                } else statusItem.textContent = 'Delete failed: ' + (res.error || '');
+              });
+            } else {
+              gitAPI.restore(projectRoot, p).then(function (res) {
+                if (res.ok) {
+                  const fullPath = (projectRoot.replace(/\\/g, '/') + '/' + p.replace(/\\/g, '/')).replace(/\/+/g, '/');
+                  if (openTabs.has(fullPath)) {
+                    readFile(fullPath).then(function (r) {
+                      if (r.ok) openTabs.get(fullPath).model.setValue(r.content);
+                    });
+                  }
+                  refreshGitPanel();
+                } else statusItem.textContent = 'Restore failed: ' + (res.error || '');
+              });
+            }
+          };
+          gitPendingList.appendChild(renderGitFileRow(item.path, item.path, 'Stage', function (p) {
+            gitAPI.add(projectRoot, p).then(function () { refreshGitPanel(); });
+          }, 'add', 'Undo', onUndo));
+        });
+      });
+    }
+
+    document.getElementById('git-unstage-all-btn').addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (!projectRoot || !gitAPI) return;
+      gitAPI.resetAll(projectRoot).then(function (res) {
+        if (res.ok) refreshGitPanel();
+        else statusItem.textContent = 'Unstage all failed: ' + (res.error || '');
+      });
+    });
+
+    document.getElementById('git-stage-all-btn').addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (!projectRoot || !gitAPI) return;
+      gitAPI.addAll(projectRoot).then(function (res) {
+        if (res.ok) refreshGitPanel();
+        else statusItem.textContent = 'Stage all failed: ' + (res.error || '');
+      });
+    });
+
+    document.getElementById('git-undo-all-btn').addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (!projectRoot || !gitAPI) return;
+      gitAPI.status(projectRoot).then(function (res) {
+        if (!res.ok || !res.unstaged || res.unstaged.length === 0) return;
+        let chain = Promise.resolve();
+        res.unstaged.forEach(function (item) {
+          chain = chain.then(function () {
+            if (item.status === '?') {
+              return window.alexide.deleteFile(projectRoot, item.path).then(function (delRes) {
+                if (delRes.ok) {
+                  const fullPath = (projectRoot.replace(/\\/g, '/') + '/' + item.path.replace(/\\/g, '/')).replace(/\/+/g, '/');
+                  if (openTabs.has(fullPath)) closeTab(fullPath);
+                }
+              });
+            }
+            return gitAPI.restore(projectRoot, item.path).then(function (restoreRes) {
+              if (restoreRes.ok) {
+                const fullPath = (projectRoot.replace(/\\/g, '/') + '/' + item.path.replace(/\\/g, '/')).replace(/\/+/g, '/');
+                if (openTabs.has(fullPath)) {
+                  return readFile(fullPath).then(function (r) {
+                    if (r.ok) openTabs.get(fullPath).model.setValue(r.content);
+                  });
+                }
+              }
+            });
+          });
+        });
+        return chain.then(function () { refreshGitPanel(); });
+      });
+    });
+
+    gitStagedHeader.addEventListener('click', function () {
+      const expanded = gitStagedHeader.getAttribute('aria-expanded') !== 'false';
+      gitStagedHeader.setAttribute('aria-expanded', !expanded);
+      gitStagedList.classList.toggle('collapsed', expanded);
+    });
+    gitPendingHeader.addEventListener('click', function () {
+      const expanded = gitPendingHeader.getAttribute('aria-expanded') !== 'false';
+      gitPendingHeader.setAttribute('aria-expanded', !expanded);
+      gitPendingList.classList.toggle('collapsed', expanded);
+    });
+
+    gitCommitBtn.addEventListener('click', function () {
+      if (!projectRoot || !gitAPI) return;
+      const msg = gitCommitMessage.value.trim();
+      if (!msg) {
+        statusItem.textContent = 'Enter a commit message.';
+        return;
+      }
+      statusItem.textContent = 'Committing…';
+      gitAPI.commit(projectRoot, msg).then(function (res) {
+        if (res.ok) {
+          gitCommitMessage.value = '';
+          statusItem.textContent = 'Committed';
+          refreshGitPanel();
+        } else {
+          statusItem.textContent = 'Commit failed: ' + (res.error || '');
+        }
+      });
+    });
+
+    gitPushBtn.addEventListener('click', function () {
+      if (!projectRoot || !gitAPI) return;
+      statusItem.textContent = 'Pushing…';
+      gitAPI.push(projectRoot).then(function (res) {
+        if (res.ok) {
+          statusItem.textContent = 'Pushed';
+          refreshGitPanel();
+        } else {
+          statusItem.textContent = 'Push failed: ' + (res.error || '');
+        }
+      });
+    });
 
     function getStoredSidebarWidth() {
       const v = localStorage.getItem(SIDEBAR_WIDTH_KEY);

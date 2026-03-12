@@ -2,6 +2,9 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, nativeImage } = require('elec
 const path = require('path');
 const fs = require('fs').promises;
 const pty = require('node-pty');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 
 const iconPath = path.join(__dirname, 'assets', 'icon.png');
 
@@ -191,6 +194,137 @@ ipcMain.handle('read-file', async (_event, filePath) => {
 ipcMain.handle('write-file', async (_event, filePath, content) => {
   try {
     await fs.writeFile(filePath, content, 'utf-8');
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// Git API (run from cwd = project root)
+// Do NOT trim stdout before split: the first column is " " for "not staged", and trim() would remove it.
+function parsePorcelain(stdout) {
+  const staged = [];
+  const unstaged = [];
+  const lines = stdout.split(/\r?\n/).filter((line) => line.length > 0);
+  for (const line of lines) {
+    if (line.length < 4) continue; // need at least "XY path"
+    const stagedChar = line[0];
+    const unstagedChar = line[1];
+    const rest = line.slice(3).trim(); // path (may have leading space when e.g. "M  path")
+    const filePath = rest.includes(' -> ') ? rest.split(' -> ').pop().trim() : rest;
+    // X = index (staged), Y = work tree (unstaged)
+    if (stagedChar !== ' ' && stagedChar !== '?' && stagedChar !== '!') {
+      staged.push({ path: filePath, status: stagedChar });
+    }
+    if (unstagedChar !== ' ' && unstagedChar !== '!' && unstagedChar !== '.') {
+      unstaged.push({ path: filePath, status: unstagedChar });
+    }
+  }
+  return { staged, unstaged };
+}
+
+ipcMain.handle('git-status', async (_event, cwd) => {
+  if (!cwd) return { ok: false, error: 'No folder', isRepo: false };
+  try {
+    await execAsync('git rev-parse --is-inside-work-tree', { cwd, maxBuffer: 4096 });
+  } catch {
+    return { ok: true, isRepo: false, staged: [], unstaged: [], aheadCount: 0 };
+  }
+  try {
+    const { stdout } = await execAsync('git status --porcelain', { cwd, maxBuffer: 1024 * 1024 });
+    const { staged, unstaged } = parsePorcelain(stdout);
+    let aheadCount = 0;
+    try {
+      const { stdout: countOut } = await execAsync('git rev-list --count @{u}..HEAD', { cwd, maxBuffer: 4096 });
+      const n = parseInt(countOut.trim(), 10);
+      if (Number.isFinite(n) && n > 0) aheadCount = n;
+    } catch (_) {}
+    return { ok: true, isRepo: true, staged, unstaged, aheadCount };
+  } catch (err) {
+    return { ok: false, error: err.message, isRepo: true, staged: [], unstaged: [], aheadCount: 0 };
+  }
+});
+
+ipcMain.handle('git-add', async (_event, cwd, filePath) => {
+  if (!cwd || !filePath) return { ok: false, error: 'Missing cwd or path' };
+  try {
+    const escaped = filePath.replace(/\\/g, '/').includes(' ') ? `"${filePath.replace(/"/g, '\\"')}"` : filePath;
+    await execAsync('git add -- ' + escaped, { cwd, maxBuffer: 4096 });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('git-reset', async (_event, cwd, filePath) => {
+  if (!cwd || !filePath) return { ok: false, error: 'Missing cwd or path' };
+  try {
+    const escaped = filePath.replace(/\\/g, '/').includes(' ') ? `"${filePath.replace(/"/g, '\\"')}"` : filePath;
+    await execAsync('git reset HEAD -- ' + escaped, { cwd, maxBuffer: 4096 });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('git-add-all', async (_event, cwd) => {
+  if (!cwd) return { ok: false, error: 'No folder' };
+  try {
+    await execAsync('git add -A', { cwd, maxBuffer: 4096 });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('git-reset-all', async (_event, cwd) => {
+  if (!cwd) return { ok: false, error: 'No folder' };
+  try {
+    await execAsync('git reset HEAD', { cwd, maxBuffer: 4096 });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('git-commit', async (_event, cwd, message) => {
+  if (!cwd) return { ok: false, error: 'No folder' };
+  if (!message || !message.trim()) return { ok: false, error: 'Commit message is required' };
+  try {
+    const msg = message.trim().replace(/"/g, '\\"').replace(/\$/g, '\\$');
+    await execAsync('git commit -m "' + msg + '"', { cwd, maxBuffer: 4096 });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('git-push', async (_event, cwd) => {
+  if (!cwd) return { ok: false, error: 'No folder' };
+  try {
+    await execAsync('git push', { cwd, maxBuffer: 1024 * 1024 });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('git-restore', async (_event, cwd, filePath) => {
+  if (!cwd || !filePath) return { ok: false, error: 'Missing cwd or path' };
+  try {
+    const escaped = filePath.replace(/\\/g, '/').includes(' ') ? `"${filePath.replace(/"/g, '\\"')}"` : filePath;
+    await execAsync('git checkout -- ' + escaped, { cwd, maxBuffer: 4096 });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('delete-file', async (_event, cwd, filePath) => {
+  if (!cwd || !filePath) return { ok: false, error: 'Missing cwd or path' };
+  try {
+    const fullPath = path.join(cwd, filePath.replace(/\//g, path.sep));
+    await fs.unlink(fullPath);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
