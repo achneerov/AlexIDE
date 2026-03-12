@@ -68,11 +68,13 @@
     const panelResizer = document.getElementById('panel-resizer');
     const panelToggle = document.getElementById('panel-toggle');
     const statusTerminalBtn = document.getElementById('status-terminal-btn');
-    const terminalContainer = document.getElementById('terminal-container');
+    const terminalView = document.getElementById('terminal-view');
+    const terminalTabsEl = document.getElementById('terminal-tabs');
+    const panelAddTerminalBtn = document.getElementById('panel-add-terminal');
 
-    let xtermTerminal = null;
-    let xtermFitAddon = null;
-    let terminalDataListenerRegistered = false;
+    var terminals = [];
+    var activeTerminalId = null;
+    var terminalDataListenerRegistered = false;
     const SIDEBAR_WIDTH_KEY = 'alexide-sidebar-width';
     const DEFAULT_SIDEBAR_WIDTH = 260;
     const MIN_SIDEBAR_WIDTH = 180;
@@ -856,12 +858,17 @@
       return Number.isFinite(n) && n >= MIN_PANEL_HEIGHT ? n : DEFAULT_PANEL_HEIGHT;
     }
 
+    function getActiveTerminal() {
+      return terminals.find(function (t) { return t.id === activeTerminalId; }) || terminals[0];
+    }
+
     function setPanelHeight(h) {
       const max = window.innerHeight * MAX_PANEL_HEIGHT_PERCENT;
       const height = Math.max(MIN_PANEL_HEIGHT, Math.min(max, h));
       terminalPanel.style.height = height + 'px';
       localStorage.setItem(PANEL_HEIGHT_KEY, String(height));
-      if (xtermFitAddon && xtermTerminal) xtermFitAddon.fit();
+      var active = getActiveTerminal();
+      if (active && active.fitAddon) active.fitAddon.fit();
     }
 
     function setPanelCollapsed(collapsed) {
@@ -871,8 +878,9 @@
       localStorage.setItem(PANEL_COLLAPSED_KEY, collapsed ? '1' : '0');
       panelToggle.textContent = collapsed ? '+' : '−';
       panelToggle.setAttribute('aria-label', collapsed ? 'Show terminal panel' : 'Minimize terminal panel');
-      if (!collapsed && xtermFitAddon && xtermTerminal) {
-        setTimeout(function () { xtermFitAddon.fit(); }, 0);
+      if (!collapsed) {
+        var active = getActiveTerminal();
+        if (active && active.fitAddon) setTimeout(function () { active.fitAddon.fit(); }, 0);
       }
     }
 
@@ -882,55 +890,151 @@
       if (!collapsed) initTerminal();
     }
 
+    function updateTerminalTabBarVisibility() {
+      if (terminals.length >= 2) terminalTabsEl.classList.add('visible');
+      else terminalTabsEl.classList.remove('visible');
+    }
+
+    function setActiveTerminal(terminalId) {
+      activeTerminalId = terminalId;
+      terminals.forEach(function (t) {
+        t.containerEl.classList.toggle('active', t.id === terminalId);
+        t.tabEl.classList.toggle('active', t.id === terminalId);
+      });
+      var active = getActiveTerminal();
+      if (active && active.fitAddon) setTimeout(function () { active.fitAddon.fit(); }, 0);
+    }
+
+    function closeTerminal(terminalId) {
+      var idx = terminals.findIndex(function (t) { return t.id === terminalId; });
+      if (idx === -1) return;
+      var t = terminals[idx];
+      terminalAPI.kill(terminalId);
+      try { if (t.xterm) t.xterm.destroy(); } catch (_) {}
+      if (t.tabEl && t.tabEl.parentNode) t.tabEl.parentNode.removeChild(t.tabEl);
+      if (t.containerEl && t.containerEl.parentNode) t.containerEl.parentNode.removeChild(t.containerEl);
+      terminals.splice(idx, 1);
+      if (terminals.length === 0) {
+        activeTerminalId = null;
+        updateTerminalTabBarVisibility();
+        return;
+      }
+      if (activeTerminalId === terminalId) {
+        var next = terminals[idx] || terminals[idx - 1];
+        setActiveTerminal(next.id);
+      }
+      updateTerminalTabBarVisibility();
+    }
+
     function createTerminalUIAndBackend(cwd) {
       const Terminal = window.Terminal;
       const FitAddonCtor = window.FitAddon?.FitAddon || window.FitAddon;
-      if (!Terminal || !FitAddonCtor) return;
-      xtermTerminal = new Terminal({
+      if (!Terminal || !FitAddonCtor) return null;
+      var containerEl = document.createElement('div');
+      containerEl.className = 'terminal-instance';
+      terminalView.appendChild(containerEl);
+
+      var xterm = new Terminal({
         theme: { background: '#1e1e1e', foreground: '#cccccc' },
         fontFamily: 'SF Mono, Monaco, Cascadia Code, Source Code Pro, Menlo, Consolas, monospace',
         fontSize: 13,
         cursorBlink: true,
       });
-      xtermFitAddon = new FitAddonCtor();
-      xtermTerminal.loadAddon(xtermFitAddon);
-      xtermTerminal.open(terminalContainer);
-      xtermFitAddon.fit();
+      var fitAddon = new FitAddonCtor();
+      xterm.loadAddon(fitAddon);
+      xterm.open(containerEl);
+      fitAddon.fit();
 
       if (!terminalDataListenerRegistered) {
-        terminalAPI.onData(function (data) {
-          if (xtermTerminal) xtermTerminal.write(data);
+        terminalAPI.onData(function (terminalId, data) {
+          var term = terminals.find(function (t) { return t.id === terminalId; });
+          if (term && term.xterm) term.xterm.write(data);
         });
         terminalDataListenerRegistered = true;
       }
-      xtermTerminal.onData(function (data) {
-        terminalAPI.sendInput(data);
-      });
 
       terminalAPI.create(cwd || undefined).then(function (res) {
         if (!res.ok) {
-          xtermTerminal.writeln('Terminal error: ' + (res.error || 'Unknown'));
+          xterm.writeln('Terminal error: ' + (res.error || 'Unknown'));
           return;
         }
-        xtermFitAddon.fit();
-        terminalAPI.resize(xtermTerminal.cols, xtermTerminal.rows);
+        var shellName = res.shellName || 'sh';
+        var terminalId = res.terminalId;
+        var tabEl = document.createElement('div');
+        tabEl.className = 'terminal-tab' + (activeTerminalId === null ? ' active' : '');
+        tabEl.dataset.terminalId = terminalId;
+        tabEl.setAttribute('role', 'button');
+        tabEl.setAttribute('aria-label', 'Terminal ' + shellName);
+        tabEl.innerHTML = '<span class="tab-label">' + escapeHtml(shellName) + '</span><button type="button" class="tab-close" aria-label="Close">×</button>';
+        var closeBtn = tabEl.querySelector('.tab-close');
+        closeBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          closeTerminal(terminalId);
+        });
+        tabEl.addEventListener('click', function (e) {
+          if (e.target === closeBtn) return;
+          setActiveTerminal(terminalId);
+        });
+        terminalTabsEl.appendChild(tabEl);
+
+        var termObj = {
+          id: terminalId,
+          shellName: shellName,
+          xterm: xterm,
+          fitAddon: fitAddon,
+          containerEl: containerEl,
+          tabEl: tabEl,
+        };
+        terminals.push(termObj);
+        if (activeTerminalId === null) {
+          activeTerminalId = terminalId;
+          containerEl.classList.add('active');
+        } else {
+          setActiveTerminal(terminalId);
+        }
+        updateTerminalTabBarVisibility();
+
+        xterm.onData(function (data) {
+          terminalAPI.sendInput(terminalId, data);
+        });
+        if (typeof xterm.onTitleChange === 'function') {
+          xterm.onTitleChange(function (title) {
+            var label = tabEl.querySelector('.tab-label');
+            if (!label) return;
+            var s = (title && String(title).trim()) ? String(title).trim() : shellName;
+            label.textContent = s;
+            tabEl.setAttribute('aria-label', 'Terminal ' + s);
+          });
+        }
+        fitAddon.fit();
+        terminalAPI.resize(terminalId, xterm.cols, xterm.rows);
       });
+      return null;
+    }
+
+    function addNewTerminal() {
+      createTerminalUIAndBackend(projectRoot || undefined);
     }
 
     function initTerminal() {
-      if (xtermTerminal) return;
+      if (terminals.length > 0) return;
       createTerminalUIAndBackend(projectRoot || undefined);
     }
 
     function reinitTerminalToProject(folderPath) {
       if (!folderPath) return;
-      if (!xtermTerminal) return;
-      var term = xtermTerminal;
-      xtermTerminal = null;
-      xtermFitAddon = null;
-      terminalAPI.kill().then(function () {
-        try { term.destroy(); } catch (_) {}
-        terminalContainer.innerHTML = '';
+      if (terminals.length === 0) return;
+      terminalAPI.killAll().then(function () {
+        terminals.forEach(function (t) {
+          try { if (t.xterm) t.xterm.destroy(); } catch (_) {}
+          if (t.tabEl && t.tabEl.parentNode) t.tabEl.parentNode.removeChild(t.tabEl);
+          if (t.containerEl && t.containerEl.parentNode) t.containerEl.parentNode.removeChild(t.containerEl);
+        });
+        terminals = [];
+        activeTerminalId = null;
+        terminalView.innerHTML = '';
+        terminalTabsEl.innerHTML = '';
+        terminalTabsEl.classList.remove('visible');
         createTerminalUIAndBackend(folderPath);
       });
     }
@@ -943,6 +1047,7 @@
 
     panelToggle.addEventListener('click', togglePanel);
     statusTerminalBtn.addEventListener('click', togglePanel);
+    if (panelAddTerminalBtn) panelAddTerminalBtn.addEventListener('click', addNewTerminal);
 
     panelResizer.addEventListener('mousedown', function (e) {
       if (e.button !== 0) return;
@@ -963,9 +1068,10 @@
     });
 
     window.addEventListener('resize', function () {
-      if (xtermFitAddon && xtermTerminal && !terminalPanel.classList.contains('collapsed')) {
-        xtermFitAddon.fit();
-        terminalAPI.resize(xtermTerminal.cols, xtermTerminal.rows);
+      var active = getActiveTerminal();
+      if (active && active.fitAddon && active.xterm && !terminalPanel.classList.contains('collapsed')) {
+        active.fitAddon.fit();
+        terminalAPI.resize(active.id, active.xterm.cols, active.xterm.rows);
       }
     });
   }

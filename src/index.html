@@ -78,9 +78,13 @@
     <section class="panel" id="terminal-panel" aria-label="Terminal">
       <div class="panel-header">
         <span class="panel-title">Terminal</span>
+        <button type="button" class="panel-add-terminal" id="panel-add-terminal" aria-label="New terminal" title="New terminal">+</button>
         <button type="button" class="panel-toggle" id="panel-toggle" aria-label="Minimize terminal panel">−</button>
       </div>
-      <div class="panel-content" id="terminal-container"></div>
+      <div class="panel-content">
+        <div class="terminal-view" id="terminal-view"></div>
+        <div class="terminal-tabs" id="terminal-tabs" aria-label="Terminal instances"></div>
+      </div>
     </section>
 
     <footer class="status-bar">

@@ -28,26 +28,37 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
 
   win.on('closed', () => {
-    const ptyProcess = terminalPtyMap.get(win.id);
-    if (ptyProcess) {
-      try { ptyProcess.kill(); } catch (_) {}
+    const winMap = terminalPtyMap.get(win.id);
+    if (winMap) {
+      winMap.forEach((ptyProcess) => { try { ptyProcess.kill(); } catch (_) {} });
       terminalPtyMap.delete(win.id);
     }
   });
 }
 
+// winId -> Map<terminalId, { pty }>
 const terminalPtyMap = new Map();
+let terminalIdCounter = 0;
+
+function getShellName(shellPath) {
+  if (!shellPath) return 'sh';
+  const name = path.basename(shellPath).toLowerCase();
+  if (name === 'cmd.exe') return 'cmd';
+  return name.replace(/\.(exe|sh)$/, '') || 'sh';
+}
 
 ipcMain.handle('terminal-create', async (event, cwd) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return { ok: false, error: 'No window' };
   const winId = win.id;
-  const existing = terminalPtyMap.get(winId);
-  if (existing) {
-    try { existing.kill(); } catch (_) {}
-    terminalPtyMap.delete(winId);
+  let winMap = terminalPtyMap.get(winId);
+  if (!winMap) {
+    winMap = new Map();
+    terminalPtyMap.set(winId, winMap);
   }
+  const terminalId = String(++terminalIdCounter);
   const shell = process.platform === 'win32' ? process.env.COMSPEC || 'cmd.exe' : (process.env.SHELL || '/bin/sh');
+  const shellName = getShellName(shell);
   const startCwd = (cwd && String(cwd).trim()) ? path.resolve(cwd) : process.cwd();
   try {
     const ptyProcess = pty.spawn(shell, [], {
@@ -55,41 +66,58 @@ ipcMain.handle('terminal-create', async (event, cwd) => {
       cwd: startCwd,
       env: process.env,
     });
-    terminalPtyMap.set(winId, ptyProcess);
+    winMap.set(terminalId, ptyProcess);
     ptyProcess.onData((data) => {
-      if (win && !win.isDestroyed()) win.webContents.send('terminal-data', data);
+      if (win && !win.isDestroyed()) win.webContents.send('terminal-data', terminalId, data);
     });
     ptyProcess.onExit(() => {
-      if (terminalPtyMap.get(winId) === ptyProcess) terminalPtyMap.delete(winId);
+      if (winMap.get(terminalId) === ptyProcess) winMap.delete(terminalId);
     });
-    return { ok: true };
+    return { ok: true, terminalId, shellName };
   } catch (err) {
     return { ok: false, error: err.message };
   }
 });
 
-ipcMain.handle('terminal-kill', (event) => {
+ipcMain.handle('terminal-kill', (event, terminalId) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  if (!win) return;
-  const ptyProcess = terminalPtyMap.get(win.id);
+  if (!win || !terminalId) return;
+  const winMap = terminalPtyMap.get(win.id);
+  if (!winMap) return;
+  const ptyProcess = winMap.get(terminalId);
   if (ptyProcess) {
     try { ptyProcess.kill(); } catch (_) {}
-    terminalPtyMap.delete(win.id);
+    winMap.delete(terminalId);
   }
   return undefined;
 });
 
-ipcMain.on('terminal-input', (event, data) => {
+ipcMain.handle('terminal-kill-all', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return;
-  const ptyProcess = terminalPtyMap.get(win.id);
+  const winMap = terminalPtyMap.get(win.id);
+  if (winMap) {
+    winMap.forEach((ptyProcess) => { try { ptyProcess.kill(); } catch (_) {} });
+    winMap.clear();
+  }
+  return undefined;
+});
+
+ipcMain.on('terminal-input', (event, terminalId, data) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || !terminalId) return;
+  const winMap = terminalPtyMap.get(win.id);
+  if (!winMap) return;
+  const ptyProcess = winMap.get(terminalId);
   if (ptyProcess) ptyProcess.write(data);
 });
 
-ipcMain.on('terminal-resize', (event, cols, rows) => {
+ipcMain.on('terminal-resize', (event, terminalId, cols, rows) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  if (!win) return;
-  const ptyProcess = terminalPtyMap.get(win.id);
+  if (!win || !terminalId) return;
+  const winMap = terminalPtyMap.get(win.id);
+  if (!winMap) return;
+  const ptyProcess = winMap.get(terminalId);
   if (ptyProcess) ptyProcess.resize(cols, rows);
 });
 

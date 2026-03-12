@@ -20,12 +20,13 @@ contextBridge.exposeInMainWorld('alexide', {
   deletePath: (targetPath) => ipcRenderer.invoke('delete-path', targetPath),
   terminal: {
     create: (cwd) => ipcRenderer.invoke('terminal-create', cwd || null),
-    kill: () => ipcRenderer.invoke('terminal-kill'),
+    kill: (terminalId) => ipcRenderer.invoke('terminal-kill', terminalId),
+    killAll: () => ipcRenderer.invoke('terminal-kill-all'),
     onData: (fn) => {
-      ipcRenderer.on('terminal-data', (_event, data) => fn(data));
+      ipcRenderer.on('terminal-data', (_event, terminalId, data) => fn(terminalId, data));
     },
-    sendInput: (data) => ipcRenderer.send('terminal-input', data),
-    resize: (cols, rows) => ipcRenderer.send('terminal-resize', cols, rows),
+    sendInput: (terminalId, data) => ipcRenderer.send('terminal-input', terminalId, data),
+    resize: (terminalId, cols, rows) => ipcRenderer.send('terminal-resize', terminalId, cols, rows),
   },
   git: {
     status: (cwd) => ipcRenderer.invoke('git-status', cwd),

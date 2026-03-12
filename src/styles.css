@@ -87,11 +87,11 @@ html, body {
 .panel-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 4px 8px;
   background: var(--bg-tabs);
   border-bottom: 1px solid var(--border);
   min-height: 28px;
+  gap: 4px;
 }
 .panel-title {
   font-size: 11px;
@@ -100,7 +100,27 @@ html, body {
   letter-spacing: 0.5px;
   color: var(--fg-sidebar);
 }
+.panel-add-terminal {
+  background: none;
+  border: none;
+  color: var(--fg-sidebar);
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 2px;
+}
+.panel-add-terminal:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.panel-add-terminal:focus {
+  outline: none;
+}
+.panel.collapsed .panel-add-terminal {
+  display: none;
+}
 .panel-toggle {
+  margin-left: auto;
   background: none;
   border: none;
   color: var(--fg-sidebar);
@@ -120,16 +140,87 @@ html, body {
   flex: 1;
   min-height: 0;
   display: flex;
-  flex-direction: column;
-  padding: 8px;
+  flex-direction: row;
+  padding: 0;
   overflow: hidden;
 }
-#terminal-container {
+.terminal-tabs {
+  width: 0;
+  overflow: hidden;
+  background: var(--bg-sidebar);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-height: 0;
+  transition: width 0.15s ease;
+}
+.terminal-tabs.visible {
+  width: 140px;
+  min-width: 140px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.terminal-tabs .terminal-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: none;
+  background: none;
+  color: var(--fg-sidebar);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.terminal-tabs .terminal-tab:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.terminal-tabs .terminal-tab.active {
+  background: rgba(255, 255, 255, 0.08);
+}
+.terminal-tabs .terminal-tab .tab-label {
   flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.terminal-tabs .terminal-tab .tab-close {
+  flex-shrink: 0;
+  padding: 0 4px;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.7;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.terminal-tabs .terminal-tab .tab-close:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+.terminal-view {
+  flex: 1;
+  min-width: 0;
   min-height: 120px;
   overflow: hidden;
+  position: relative;
+  padding: 8px;
 }
-#terminal-container .xterm {
+.terminal-instance {
+  position: absolute;
+  inset: 8px;
+  display: none;
+  flex-direction: column;
+  min-height: 0;
+}
+.terminal-instance.active {
+  display: flex;
+}
+.terminal-instance .xterm {
   height: 100%;
   padding: 4px;
 }
