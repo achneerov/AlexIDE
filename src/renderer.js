@@ -38,9 +38,13 @@
     const openTabs = new Map();
     let activeFilePath = null;
 
+    const sidebarEl = document.querySelector('.sidebar');
+    const sidebarResizer = document.getElementById('sidebar-resizer');
     const monacoRoot = document.getElementById('monaco-root');
     const fileTreeEl = document.getElementById('file-tree');
     const folderPlaceholder = document.getElementById('folder-placeholder');
+    const sidebarPanelExplorer = document.getElementById('sidebar-panel-explorer');
+    const sidebarPanelGit = document.getElementById('sidebar-panel-git');
     const tabsEl = document.getElementById('tabs');
     const statusItem = document.getElementById('status-item');
     const statusPosition = document.getElementById('status-position');
@@ -53,6 +57,10 @@
 
     let xtermTerminal = null;
     let xtermFitAddon = null;
+    const SIDEBAR_WIDTH_KEY = 'alexide-sidebar-width';
+    const DEFAULT_SIDEBAR_WIDTH = 260;
+    const MIN_SIDEBAR_WIDTH = 180;
+    const MAX_SIDEBAR_WIDTH = 480;
     const PANEL_HEIGHT_KEY = 'alexide-panel-height';
     const PANEL_COLLAPSED_KEY = 'alexide-panel-collapsed';
     const DEFAULT_PANEL_HEIGHT = 240;
@@ -378,6 +386,46 @@
 
     document.getElementById('open-folder-sidebar').addEventListener('click', openFolderClicked);
     if (window.alexide.onMenuOpenFolder) window.alexide.onMenuOpenFolder(openFolderClicked);
+
+    function switchSidebarTab(panel) {
+      const isExplorer = panel === 'explorer';
+      document.getElementById('sidebar-tab-explorer').classList.toggle('open', isExplorer);
+      document.getElementById('sidebar-tab-explorer').setAttribute('aria-pressed', isExplorer ? 'true' : 'false');
+      document.getElementById('sidebar-tab-git').classList.toggle('open', !isExplorer);
+      document.getElementById('sidebar-tab-git').setAttribute('aria-pressed', !isExplorer ? 'true' : 'false');
+      sidebarPanelExplorer.style.display = isExplorer ? '' : 'none';
+      sidebarPanelGit.style.display = isExplorer ? 'none' : '';
+    }
+    document.getElementById('sidebar-tab-explorer').addEventListener('click', function () { switchSidebarTab('explorer'); });
+    document.getElementById('sidebar-tab-git').addEventListener('click', function () { switchSidebarTab('git'); });
+
+    function getStoredSidebarWidth() {
+      const v = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+      const n = parseInt(v, 10);
+      return Number.isFinite(n) && n >= MIN_SIDEBAR_WIDTH && n <= MAX_SIDEBAR_WIDTH ? n : DEFAULT_SIDEBAR_WIDTH;
+    }
+    function setSidebarWidth(w) {
+      const width = Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, w));
+      sidebarEl.style.width = width + 'px';
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width));
+    }
+    setSidebarWidth(getStoredSidebarWidth());
+
+    sidebarResizer.addEventListener('mousedown', function (e) {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const startX = e.clientX;
+      const startWidth = sidebarEl.offsetWidth;
+      function onMouseMove(ev) {
+        setSidebarWidth(startWidth + (ev.clientX - startX));
+      }
+      function onMouseUp() {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      }
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
 
     document.addEventListener('keydown', function (e) {
       if (e.key === 's' && (e.ctrlKey || e.metaKey)) {

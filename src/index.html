@@ -14,17 +14,28 @@
     <div class="workbench">
       <aside class="sidebar">
         <div class="sidebar-header">
-          <span>Explorer</span>
+          <div class="sidebar-tabs">
+            <button type="button" class="sidebar-tab open" id="sidebar-tab-explorer" aria-pressed="true">Folder</button>
+            <button type="button" class="sidebar-tab" id="sidebar-tab-git" aria-pressed="false">Git</button>
+          </div>
         </div>
         <div class="sidebar-content">
-          <div id="folder-placeholder" class="placeholder">
-            <p>No folder opened</p>
-            <button type="button" class="open-folder-btn" id="open-folder-sidebar">Open Folder</button>
+          <div id="sidebar-panel-explorer" class="sidebar-panel">
+            <div id="folder-placeholder" class="placeholder">
+              <p>No folder opened</p>
+              <button type="button" class="open-folder-btn" id="open-folder-sidebar">Open Folder</button>
+            </div>
+            <div id="file-tree" class="file-tree" style="display: none;"></div>
           </div>
-          <div id="file-tree" class="file-tree" style="display: none;"></div>
+          <div id="sidebar-panel-git" class="sidebar-panel" style="display: none;">
+            <div id="git-changes-placeholder" class="placeholder">
+              <p>Git changes will appear here when a folder is opened.</p>
+            </div>
+            <div id="git-changes-list" class="file-tree" style="display: none;"></div>
+          </div>
         </div>
       </aside>
-
+      <div class="sidebar-resizer" id="sidebar-resizer" title="Drag to resize"></div>
       <main class="editor-area">
         <div class="tabs" id="tabs"></div>
         <div class="editor-container" id="editor-container">
