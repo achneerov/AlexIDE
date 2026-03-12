@@ -330,3 +330,50 @@ ipcMain.handle('delete-file', async (_event, cwd, filePath) => {
     return { ok: false, error: err.message };
   }
 });
+
+ipcMain.handle('create-file', async (_event, parentDir, name) => {
+  if (!parentDir || !name || !name.trim()) return { ok: false, error: 'Missing parent or name' };
+  try {
+    const fullPath = path.join(parentDir, name.trim().replace(/\//g, path.sep));
+    await fs.writeFile(fullPath, '', 'utf-8');
+    return { ok: true, path: fullPath };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('create-folder', async (_event, parentDir, name) => {
+  if (!parentDir || !name || !name.trim()) return { ok: false, error: 'Missing parent or name' };
+  try {
+    const fullPath = path.join(parentDir, name.trim().replace(/\//g, path.sep));
+    await fs.mkdir(fullPath, { recursive: false });
+    return { ok: true, path: fullPath };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('rename-path', async (_event, oldPath, newPath) => {
+  if (!oldPath || !newPath) return { ok: false, error: 'Missing path' };
+  try {
+    await fs.rename(oldPath, newPath);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('delete-path', async (_event, targetPath) => {
+  if (!targetPath) return { ok: false, error: 'Missing path' };
+  try {
+    const stat = await fs.stat(targetPath);
+    if (stat.isDirectory()) {
+      await fs.rm(targetPath, { recursive: true, force: true });
+    } else {
+      await fs.unlink(targetPath);
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});

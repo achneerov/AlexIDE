@@ -32,7 +32,7 @@
   });
 
   function initApp() {
-    const { openFolder, listDir, readFile, writeFile, terminal: terminalAPI, git: gitAPI } = window.alexide;
+    const { openFolder, listDir, readFile, writeFile, createFile: createFileAPI, createFolder: createFolderAPI, renamePath: renamePathAPI, deletePath: deletePathAPI, terminal: terminalAPI, git: gitAPI } = window.alexide;
     let projectRoot = null;
     let editor = null;
     const openTabs = new Map();
@@ -43,6 +43,7 @@
     const monacoRoot = document.getElementById('monaco-root');
     const fileTreeEl = document.getElementById('file-tree');
     const folderPlaceholder = document.getElementById('folder-placeholder');
+    const explorerContextMenu = document.getElementById('explorer-context-menu');
     const sidebarPanelExplorer = document.getElementById('sidebar-panel-explorer');
     const sidebarPanelGit = document.getElementById('sidebar-panel-git');
     const gitChangesPlaceholder = document.getElementById('git-changes-placeholder');
@@ -401,6 +402,170 @@
 
     document.getElementById('open-folder-sidebar').addEventListener('click', openFolderClicked);
     if (window.alexide.onMenuOpenFolder) window.alexide.onMenuOpenFolder(openFolderClicked);
+
+    function getParentPath(p) {
+      const normalized = (p || '').replace(/\\/g, '/');
+      const idx = normalized.lastIndexOf('/');
+      return idx <= 0 ? (normalized || p) : normalized.slice(0, idx);
+    }
+
+    function refreshFileTree() {
+      if (!projectRoot) return;
+      listDir(projectRoot).then(function (r) {
+        if (!r.ok) return;
+        fileTreeEl.innerHTML = '';
+        renderTree(r.entries, projectRoot, fileTreeEl, 0);
+      });
+    }
+
+    function closeContextMenu() {
+      if (explorerContextMenu._outsideHandler) {
+        document.removeEventListener('mousedown', explorerContextMenu._outsideHandler);
+        explorerContextMenu._outsideHandler = null;
+      }
+      explorerContextMenu.setAttribute('aria-hidden', 'true');
+      explorerContextMenu.innerHTML = '';
+    }
+
+    function removeNewItemInput() {
+      var existing = fileTreeEl.querySelector('.tree-item.new-item-inline');
+      if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+    }
+
+    function showNewItemInput(parentDir, kind) {
+      removeNewItemInput();
+      var wrap = document.createElement('div');
+      wrap.className = 'tree-item new-item-inline';
+      var row = document.createElement('div');
+      row.className = 'tree-item-row';
+      row.style.paddingLeft = '6px';
+      var spacer = document.createElement('span');
+      spacer.className = 'tree-chevron tree-chevron-spacer';
+      spacer.setAttribute('aria-hidden', 'true');
+      spacer.style.marginRight = '5px';
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'new-item-input';
+      input.placeholder = kind === 'folder' ? 'Folder name' : 'File name';
+      input.setAttribute('autocomplete', 'off');
+      row.appendChild(spacer);
+      row.appendChild(input);
+      wrap.appendChild(row);
+      fileTreeEl.insertBefore(wrap, fileTreeEl.firstChild);
+
+      function commit() {
+        var name = (input.value || '').trim();
+        if (!name) {
+          removeNewItemInput();
+          return;
+        }
+        var api = kind === 'folder' ? createFolderAPI : createFileAPI;
+        api(parentDir, name).then(function (res) {
+          removeNewItemInput();
+          if (res.ok) refreshFileTree();
+          else statusItem.textContent = 'Error: ' + (res.error || '');
+        });
+      }
+
+      function cancel() {
+        removeNewItemInput();
+      }
+
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commit();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          cancel();
+        }
+      });
+      input.addEventListener('blur', function () {
+        setTimeout(function () {
+          if (wrap.parentNode && (input.value || '').trim() === '') cancel();
+        }, 150);
+      });
+      requestAnimationFrame(function () { input.focus(); });
+    }
+
+    sidebarPanelExplorer.addEventListener('contextmenu', function (e) {
+      if (!projectRoot || fileTreeEl.style.display !== 'block') return;
+      e.preventDefault();
+      var item = e.target.closest('.tree-item');
+      var targetPath = item ? item.dataset.path : projectRoot;
+      var isDir = item ? (item.dataset.isDir === 'true') : true;
+      var parentDir = isDir ? targetPath : getParentPath(targetPath);
+
+      explorerContextMenu.innerHTML = '';
+      function addItem(label, fn) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'context-menu-item';
+        btn.textContent = label;
+        btn.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          closeContextMenu();
+          fn();
+        });
+        explorerContextMenu.appendChild(btn);
+      }
+
+      addItem('New File', function () {
+        showNewItemInput(parentDir, 'file');
+      });
+      addItem('New Folder', function () {
+        showNewItemInput(parentDir, 'folder');
+      });
+
+      if (item) {
+        addItem('Rename', function () {
+          var currentName = targetPath.replace(/\\/g, '/').split('/').pop();
+          var newName = prompt('Enter new name', currentName);
+          if (!newName || !newName.trim() || newName === currentName) return;
+          var newPath = getParentPath(targetPath) + '/' + newName.trim();
+          renamePathAPI(targetPath, newPath).then(function (res) {
+            if (res.ok) {
+              if (openTabs.has(targetPath)) closeTab(targetPath);
+              refreshFileTree();
+            } else statusItem.textContent = 'Error: ' + (res.error || '');
+          });
+        });
+        addItem('Delete', function () {
+          var label = (item.dataset.path || '').replace(/\\/g, '/').split('/').pop();
+          if (!confirm("Delete \"" + label + "\"?")) return;
+          deletePathAPI(targetPath).then(function (res) {
+            if (res.ok) {
+              var targetNorm = targetPath.replace(/\\/g, '/');
+              var toClose = [];
+              openTabs.forEach(function (_tab, path) {
+                var p = path.replace(/\\/g, '/');
+                if (p === targetNorm || p.startsWith(targetNorm + '/')) toClose.push(path);
+              });
+              toClose.forEach(function (path) { closeTab(path); });
+              refreshFileTree();
+            } else statusItem.textContent = 'Error: ' + (res.error || '');
+          });
+        });
+      }
+
+      if (explorerContextMenu.parentNode !== document.body) document.body.appendChild(explorerContextMenu);
+      explorerContextMenu.setAttribute('aria-hidden', 'false');
+      var x = e.clientX;
+      var y = e.clientY;
+      explorerContextMenu.style.left = x + 'px';
+      explorerContextMenu.style.top = y + 'px';
+      requestAnimationFrame(function () {
+        var rect = explorerContextMenu.getBoundingClientRect();
+        if (rect.right > window.innerWidth) explorerContextMenu.style.left = (window.innerWidth - rect.width) + 'px';
+        if (rect.bottom > window.innerHeight) explorerContextMenu.style.top = (window.innerHeight - rect.height) + 'px';
+      });
+      function onOutside(ev) {
+        if (explorerContextMenu.contains(ev.target)) return;
+        closeContextMenu();
+      }
+      explorerContextMenu._outsideHandler = onOutside;
+      document.addEventListener('mousedown', onOutside);
+    });
 
     function switchSidebarTab(panel) {
       const isExplorer = panel === 'explorer';

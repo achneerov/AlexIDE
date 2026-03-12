@@ -14,6 +14,10 @@ contextBridge.exposeInMainWorld('alexide', {
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
   writeFile: (filePath, content) => ipcRenderer.invoke('write-file', filePath, content),
   deleteFile: (cwd, filePath) => ipcRenderer.invoke('delete-file', cwd, filePath),
+  createFile: (parentDir, name) => ipcRenderer.invoke('create-file', parentDir, name),
+  createFolder: (parentDir, name) => ipcRenderer.invoke('create-folder', parentDir, name),
+  renamePath: (oldPath, newPath) => ipcRenderer.invoke('rename-path', oldPath, newPath),
+  deletePath: (targetPath) => ipcRenderer.invoke('delete-path', targetPath),
   terminal: {
     create: (cwd) => ipcRenderer.invoke('terminal-create', cwd || null),
     onData: (fn) => {

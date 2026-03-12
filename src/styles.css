@@ -221,6 +221,40 @@ html, body {
   overflow: auto;
   padding: 8px 0;
   min-height: 0;
+  position: relative;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 10000;
+  min-width: 160px;
+  padding: 4px 0;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  display: none;
+}
+
+.context-menu[aria-hidden="false"] {
+  display: block;
+}
+
+.context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 6px 14px;
+  border: none;
+  background: none;
+  color: var(--fg-sidebar);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.context-menu-item:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .sidebar-panel {
@@ -514,6 +548,41 @@ html, body {
 
 .tree-item-row:hover {
   background: rgba(255, 255, 255, 0.06);
+}
+
+/* Inline new file/folder input row */
+.tree-item.new-item-inline {
+  animation: newItemFadeIn 0.2s ease;
+}
+
+@keyframes newItemFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.tree-item.new-item-inline .tree-item-row {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tree-item.new-item-inline .new-item-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0 4px;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: var(--fg-sidebar);
+  font-size: 13px;
+  font-family: inherit;
+  caret-color: var(--fg-sidebar);
+}
+
+.tree-item.new-item-inline .new-item-input::placeholder {
+  color: #666;
+}
+
+.tree-item.new-item-inline .new-item-input:focus {
+  outline: none;
 }
 
 .tree-item-row.active {
