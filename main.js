@@ -1,5 +1,6 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, nativeImage, shell, clipboard } = require('electron');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const fs = require('fs').promises;
 const pty = require('node-pty');
 const { exec } = require('child_process');
@@ -269,6 +270,25 @@ ipcMain.handle('get-icon-data-url', async () => {
   } catch (err) {
     return { ok: false };
   }
+});
+
+ipcMain.handle('show-item-in-folder', (_event, filePath) => {
+  if (!filePath || typeof filePath !== 'string') return;
+  try {
+    shell.showItemInFolder(path.resolve(filePath));
+  } catch (err) {}
+});
+
+ipcMain.handle('open-in-browser', (_event, filePath) => {
+  if (!filePath || typeof filePath !== 'string') return;
+  try {
+    const url = pathToFileURL(path.resolve(filePath)).href;
+    shell.openExternal(url);
+  } catch (err) {}
+});
+
+ipcMain.handle('copy-to-clipboard', (_event, text) => {
+  if (text != null) clipboard.writeText(String(text));
 });
 
 ipcMain.handle('read-file', async (_event, filePath) => {

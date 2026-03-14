@@ -652,6 +652,19 @@
       });
 
       if (item) {
+        var revealLabel = window.alexide.platform === 'darwin' ? 'Reveal in Finder' : (window.alexide.platform === 'win32' ? 'Show in Explorer' : 'Reveal in File Manager');
+        addItem(revealLabel, function () {
+          window.alexide.showItemInFolder(targetPath);
+        });
+        addItem('Open in Browser', function () {
+          window.alexide.openInBrowser(targetPath);
+        });
+        addItem('Copy Absolute Path', function () {
+          window.alexide.copyToClipboard(targetPath);
+        });
+        var sep = document.createElement('div');
+        sep.className = 'context-menu-separator';
+        explorerContextMenu.appendChild(sep);
         addItem('Rename', function () {
           var currentName = targetPath.replace(/\\/g, '/').split('/').pop();
           var newName = prompt('Enter new name', currentName);
