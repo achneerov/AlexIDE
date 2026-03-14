@@ -656,7 +656,7 @@
         addItem(revealLabel, function () {
           window.alexide.showItemInFolder(targetPath);
         });
-        addItem('Open in Browser', function () {
+        addItem('Open in Default App', function () {
           window.alexide.openInBrowser(targetPath);
         });
         addItem('Copy Absolute Path', function () {
