@@ -158,6 +158,37 @@ function buildAppMenu() {
       label: 'View',
       submenu: [
         {
+          label: 'Zoom In',
+          accelerator: 'CmdOrCtrl+=',
+          click: () => {
+            const win = BrowserWindow.getFocusedWindow();
+            if (win && !win.isDestroyed()) {
+              const level = win.webContents.getZoomLevel();
+              win.webContents.setZoomLevel(level + 0.5);
+            }
+          },
+        },
+        {
+          label: 'Zoom Out',
+          accelerator: 'CmdOrCtrl+-',
+          click: () => {
+            const win = BrowserWindow.getFocusedWindow();
+            if (win && !win.isDestroyed()) {
+              const level = win.webContents.getZoomLevel();
+              win.webContents.setZoomLevel(level - 0.5);
+            }
+          },
+        },
+        {
+          label: 'Actual Size',
+          accelerator: 'CmdOrCtrl+0',
+          click: () => {
+            const win = BrowserWindow.getFocusedWindow();
+            if (win && !win.isDestroyed()) win.webContents.setZoomLevel(0);
+          },
+        },
+        { type: 'separator' },
+        {
           label: 'Toggle Terminal',
           accelerator: 'CmdOrCtrl+J',
           click: () => {
