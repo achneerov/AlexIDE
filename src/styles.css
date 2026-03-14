@@ -786,6 +786,14 @@ html, body {
   text-overflow: ellipsis;
 }
 
+.tab.temp .label {
+  font-style: italic;
+}
+
+.tab.tab-dragging {
+  opacity: 0.7;
+}
+
 .tab .close {
   opacity: 0.6;
   padding: 0;

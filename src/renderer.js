@@ -36,6 +36,8 @@
     let projectRoot = null;
     let editor = null;
     const openTabs = new Map();
+    const tabOrder = [];
+    let currentTempTabKey = null;
     let activeFilePath = null;
 
     const sidebarEl = document.querySelector('.sidebar');
@@ -170,12 +172,51 @@
       tab.el.classList.toggle('dirty', !!tab.dirty);
     }
 
-    function addTab(filePath, content, name) {
+    function addTab(filePath, content, name, options) {
+      options = options || {};
       name = name || filePath.split(/[/\\]/).pop();
+      const asTemp = !!options.temp && !options.permanent;
+
       if (openTabs.has(filePath)) {
         switchToTab(filePath);
+        const tab = openTabs.get(filePath);
+        if (options.permanent && tab.temp) {
+          tab.temp = false;
+          currentTempTabKey = currentTempTabKey === filePath ? null : currentTempTabKey;
+          if (tab.el) tab.el.classList.remove('temp');
+        }
         return;
       }
+
+      if (asTemp && currentTempTabKey != null && openTabs.has(currentTempTabKey)) {
+        const tab = openTabs.get(currentTempTabKey);
+        if (tab.isDiff) { currentTempTabKey = null; } else {
+          tab.model.dispose();
+          const language = getLanguage(filePath);
+          const model = window.monaco.editor.createModel(content || '', language, window.monaco.Uri.file(filePath));
+          const oldKey = currentTempTabKey;
+          tab.filePath = filePath;
+          tab.name = name;
+          tab.model = model;
+          tab.dirty = false;
+          openTabs.delete(oldKey);
+          openTabs.set(filePath, tab);
+          const idx = tabOrder.indexOf(oldKey);
+          if (idx !== -1) tabOrder[idx] = filePath;
+          currentTempTabKey = filePath;
+          tab.el.dataset.path = filePath;
+          const label = tab.el.querySelector('.label');
+          if (label) label.textContent = name;
+          tab.el.classList.remove('dirty');
+          model.onDidChangeContent(function () {
+            tab.dirty = true;
+            updateTabLabel(filePath);
+          });
+          switchToTab(filePath);
+          return;
+        }
+      }
+
       const language = getLanguage(filePath);
       const model = window.monaco.editor.createModel(content || '', language, window.monaco.Uri.file(filePath));
       const tab = {
@@ -184,26 +225,73 @@
         model,
         dirty: false,
         isDiff: false,
+        temp: asTemp,
         el: null,
       };
       openTabs.set(filePath, tab);
+      tabOrder.push(filePath);
 
       const tabEl = document.createElement('div');
-      tabEl.className = 'tab';
+      tabEl.className = 'tab' + (tab.temp ? ' temp' : '');
       tabEl.dataset.path = filePath;
+      tabEl.draggable = true;
       tabEl.innerHTML = '<span class="label">' + escapeHtml(name) + '</span><button type="button" class="close" aria-label="Close"><span class="close-dot">•</span><span class="close-x">×</span></button>';
       tab.el = tabEl;
       tabsEl.appendChild(tabEl);
+      if (asTemp) currentTempTabKey = filePath;
 
       tabEl.querySelector('.close').addEventListener('click', function (e) {
         e.stopPropagation();
         closeTabWithConfirm(filePath);
       });
-      tabEl.addEventListener('click', function () {
-        switchToTab(filePath);
+      tabEl.addEventListener('click', function (e) {
+        if (e.detail === 2) {
+          tab.temp = false;
+          if (currentTempTabKey === filePath) currentTempTabKey = null;
+          tabEl.classList.remove('temp');
+        } else {
+          switchToTab(filePath);
+        }
+      });
+      tabEl.addEventListener('dragstart', function (e) {
+        e.dataTransfer.setData('text/plain', tabEl.dataset.path);
+        e.dataTransfer.effectAllowed = 'move';
+        tabEl.classList.add('tab-dragging');
+      });
+      tabEl.addEventListener('dragend', function () {
+        tabEl.classList.remove('tab-dragging');
+      });
+      tabEl.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+      });
+      tabEl.addEventListener('drop', function (e) {
+        e.preventDefault();
+        const draggedKey = e.dataTransfer.getData('text/plain');
+        const targetKey = tabEl.dataset.path;
+        if (!draggedKey || draggedKey === targetKey) return;
+        const fromIdx = tabOrder.indexOf(draggedKey);
+        const toIdx = tabOrder.indexOf(targetKey);
+        if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+        tabOrder.splice(fromIdx, 1);
+        const insertIdx = fromIdx < toIdx ? toIdx - 1 : toIdx;
+        tabOrder.splice(insertIdx, 0, draggedKey);
+        syncTabsDOM();
+      });
+
+      model.onDidChangeContent(function () {
+        tab.dirty = true;
+        updateTabLabel(filePath);
       });
 
       switchToTab(filePath);
+    }
+
+    function syncTabsDOM() {
+      tabOrder.forEach(function (k) {
+        const t = openTabs.get(k);
+        if (t && t.el && t.el.parentNode === tabsEl) tabsEl.appendChild(t.el);
+      });
     }
 
     function addDiffTab(fullPath, relativePath, indexContent, workingContent, source) {
@@ -223,10 +311,12 @@
         el: null,
       };
       openTabs.set(key, tab);
+      tabOrder.push(key);
 
       var tabEl = document.createElement('div');
       tabEl.className = 'tab';
       tabEl.dataset.path = key;
+      tabEl.draggable = true;
       tabEl.innerHTML = '<span class="label">' + escapeHtml(tabLabel) + '</span><button type="button" class="close" aria-label="Close">×</button>';
       tab.el = tabEl;
       tabsEl.appendChild(tabEl);
@@ -237,6 +327,30 @@
       });
       tabEl.addEventListener('click', function () {
         switchToTab(key);
+      });
+      tabEl.addEventListener('dragstart', function (e) {
+        e.dataTransfer.setData('text/plain', key);
+        e.dataTransfer.effectAllowed = 'move';
+        tabEl.classList.add('tab-dragging');
+      });
+      tabEl.addEventListener('dragend', function () {
+        tabEl.classList.remove('tab-dragging');
+      });
+      tabEl.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+      });
+      tabEl.addEventListener('drop', function (e) {
+        e.preventDefault();
+        var draggedKey = e.dataTransfer.getData('text/plain');
+        if (!draggedKey || draggedKey === key) return;
+        var fromIdx = tabOrder.indexOf(draggedKey);
+        var toIdx = tabOrder.indexOf(key);
+        if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+        tabOrder.splice(fromIdx, 1);
+        var insertIdx = fromIdx < toIdx ? toIdx - 1 : toIdx;
+        tabOrder.splice(insertIdx, 0, draggedKey);
+        syncTabsDOM();
       });
 
       var diffAPI = window.alexide && window.alexide.diff;
@@ -374,6 +488,9 @@
     function closeTab(filePathOrKey) {
       const tab = openTabs.get(filePathOrKey);
       if (!tab) return;
+      if (currentTempTabKey === filePathOrKey) currentTempTabKey = null;
+      const idx = tabOrder.indexOf(filePathOrKey);
+      if (idx !== -1) tabOrder.splice(idx, 1);
       if (!tab.isDiff) {
         tab.model.dispose();
       }
@@ -381,7 +498,10 @@
       openTabs.delete(filePathOrKey);
       if (activeFilePath === filePathOrKey) {
         var next = null;
-        openTabs.forEach(function (_t, k) { if (!next) next = k; });
+        if (idx !== -1 && tabOrder.length > 0) {
+          var nextIdx = idx < tabOrder.length ? idx : idx - 1;
+          next = tabOrder[nextIdx];
+        }
         if (next) switchToTab(next);
         else {
           activeFilePath = null;
@@ -425,9 +545,9 @@
       });
     }
 
-    function openFile(filePath, name) {
+    function openFile(filePath, name, options) {
       readFile(filePath).then(function (res) {
-        if (res.ok) addTab(filePath, res.content, name);
+        if (res.ok) addTab(filePath, res.content, name, options);
         else {}
       });
     }
@@ -537,7 +657,17 @@
         });
       } else {
         row.addEventListener('click', function () {
-          openFile(entry.path, entry.name);
+          var t = setTimeout(function () {
+            openFile(entry.path, entry.name, { temp: true });
+          }, 250);
+          row._openTimeout = t;
+        });
+        row.addEventListener('dblclick', function () {
+          if (row._openTimeout) {
+            clearTimeout(row._openTimeout);
+            row._openTimeout = null;
+          }
+          openFile(entry.path, entry.name, { permanent: true });
         });
       }
       return wrap;
