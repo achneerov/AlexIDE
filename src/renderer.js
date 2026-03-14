@@ -65,6 +65,8 @@
     const gitPendingHeader = document.getElementById('git-pending-header');
     const gitStageAllBtn = document.getElementById('git-stage-all-btn');
     const gitUndoAllBtn = document.getElementById('git-undo-all-btn');
+    const gitFileHistoryHeader = document.getElementById('git-file-history-header');
+    const gitFileHistoryList = document.getElementById('git-file-history-list');
     const tabsEl = document.getElementById('tabs');
     const statusPosition = document.getElementById('status-position');
     const ideEl = document.querySelector('.ide');
@@ -301,7 +303,7 @@
         return;
       }
       var name = (relativePath || fullPath).split(/[/\\]/).pop();
-      var suffix = (source === 'changes') ? ' (working tree)' : ' (index)';
+      var suffix = (source === 'changes') ? ' (working tree)' : (source && source.indexOf('history:') === 0 ? ' (' + source.slice(8) + ')' : ' (index)');
       var tabLabel = name + suffix;
       var tab = {
         filePath: fullPath,
@@ -468,6 +470,7 @@
         el.classList.toggle('open', el.dataset.path === filePathOrKey);
       });
       syncExplorerToFile(tab.filePath);
+      if (sidebarPanelGit.style.display !== 'none') refreshFileHistory();
       if (tab.isDiff) {
         if (monacoRoot) monacoRoot.style.display = 'none';
         if (monacoDiffRoot) monacoDiffRoot.setAttribute('aria-hidden', 'false');
@@ -1003,6 +1006,87 @@
           }, 'add', 'Undo', onUndo, function (p) { openDiffForFile(p, 'changes'); }));
         });
         refreshBranchSwitcher();
+        refreshFileHistory();
+      });
+    }
+
+    function refreshFileHistory() {
+      if (!gitFileHistoryList || !gitFileHistoryHeader) return;
+      if (!projectRoot || !gitAPI || !activeFilePath) {
+        gitFileHistoryList.innerHTML = '<div class="git-file-history-empty">No file selected</div>';
+        return;
+      }
+      const tab = openTabs.get(activeFilePath);
+      if (tab && tab.isDiff) {
+        gitFileHistoryList.innerHTML = '<div class="git-file-history-empty">Select a file to view history</div>';
+        return;
+      }
+      const rootNorm = projectRoot.replace(/\\/g, '/').replace(/\/+$/, '');
+      const fullNorm = activeFilePath.replace(/\\/g, '/');
+      if (fullNorm.indexOf(rootNorm) !== 0 || (fullNorm.length > rootNorm.length && fullNorm[rootNorm.length] !== '/')) {
+        gitFileHistoryList.innerHTML = '<div class="git-file-history-empty">File is outside project</div>';
+        return;
+      }
+      const relPath = fullNorm.length === rootNorm.length ? '' : fullNorm.slice(rootNorm.length + 1);
+      if (!relPath) {
+        gitFileHistoryList.innerHTML = '<div class="git-file-history-empty">Select a file to view history</div>';
+        return;
+      }
+      gitFileHistoryList.innerHTML = '<div class="git-file-history-loading">Loading…</div>';
+      gitAPI.fileHistory(projectRoot, relPath).then(function (res) {
+        if (!res.ok) {
+          gitFileHistoryList.innerHTML = '<div class="git-file-history-empty">' + escapeHtml(res.error || 'Failed to load history') + '</div>';
+          return;
+        }
+        const commits = res.commits || [];
+        if (commits.length === 0) {
+          gitFileHistoryList.innerHTML = '<div class="git-file-history-empty">No history for this file</div>';
+          return;
+        }
+        gitFileHistoryList.innerHTML = '';
+        const rootNorm2 = projectRoot.replace(/\\/g, '/').replace(/\/+$/, '');
+        const fullNorm2 = activeFilePath.replace(/\\/g, '/');
+        const relPath2 = fullNorm2.length <= rootNorm2.length + 1 ? '' : fullNorm2.slice(rootNorm2.length + 1);
+        commits.forEach(function (c, index) {
+          const dateStr = c.date ? c.date.slice(0, 10) : '';
+          const row = document.createElement('div');
+          row.className = 'git-file-history-row';
+          row.dataset.rev = c.shortHash;
+          row.dataset.index = String(index);
+          row.innerHTML = '<span class="git-file-history-hash">' + escapeHtml(c.shortHash) + '</span> ' +
+            '<span class="git-file-history-subject">' + escapeHtml(c.subject) + '</span> ' +
+            '<span class="git-file-history-date">' + escapeHtml(dateStr) + '</span>';
+          row.addEventListener('click', function () {
+            const idx = parseInt(row.dataset.index, 10);
+            const newRev = commits[idx].shortHash;
+            const prevRev = commits[idx + 1] ? commits[idx + 1].shortHash : null;
+            const fullPath = (rootNorm2 + '/' + relPath2).replace(/\/+/g, '/');
+            const key = 'diff:' + fullPath + ':history:' + newRev;
+            if (openTabs.has(key)) {
+              switchToTab(key);
+              return;
+            }
+            function openHistoryDiff(oldContent, newContent, labelRev) {
+              addDiffTab(fullPath, relPath2, oldContent, newContent, 'history:' + labelRev);
+            }
+            if (prevRev) {
+              Promise.all([
+                gitAPI.showRevision(projectRoot, relPath2, prevRev),
+                gitAPI.showRevision(projectRoot, relPath2, newRev),
+              ]).then(function (results) {
+                const oldContent = results[0].ok ? (results[0].content || '') : '';
+                const newContent = results[1].ok ? (results[1].content || '') : '';
+                openHistoryDiff(oldContent, newContent, newRev);
+              });
+            } else {
+              gitAPI.showRevision(projectRoot, relPath2, newRev).then(function (r) {
+                const newContent = r.ok ? (r.content || '') : '';
+                openHistoryDiff('', newContent, newRev);
+              });
+            }
+          });
+          gitFileHistoryList.appendChild(row);
+        });
       });
     }
 
@@ -1066,6 +1150,13 @@
       gitPendingHeader.setAttribute('aria-expanded', !expanded);
       gitPendingList.classList.toggle('collapsed', expanded);
     });
+    if (gitFileHistoryHeader) {
+      gitFileHistoryHeader.addEventListener('click', function () {
+        const expanded = gitFileHistoryHeader.getAttribute('aria-expanded') !== 'false';
+        gitFileHistoryHeader.setAttribute('aria-expanded', !expanded);
+        gitFileHistoryList.classList.toggle('collapsed', expanded);
+      });
+    }
 
     gitCommitBtn.addEventListener('click', function () {
       if (!projectRoot || !gitAPI) return;

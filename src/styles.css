@@ -520,6 +520,49 @@ html, body {
   display: none;
 }
 
+.git-file-history-section .git-section-body {
+  max-height: 200px;
+}
+
+.git-file-history-row {
+  display: block;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--fg-sidebar);
+  border-top: 1px solid var(--border);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.git-file-history-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.git-file-history-hash {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  margin-right: 6px;
+}
+
+.git-file-history-subject {
+  word-break: break-word;
+}
+
+.git-file-history-date {
+  display: block;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 2px;
+}
+
+.git-file-history-empty,
+.git-file-history-loading {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
 .git-file-row {
   display: flex;
   align-items: center;

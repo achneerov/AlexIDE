@@ -554,6 +554,38 @@ ipcMain.handle('git-show-head', async (_event, cwd, filePath) => {
   }
 });
 
+ipcMain.handle('git-show-revision', async (_event, cwd, filePath, rev) => {
+  if (!cwd || !filePath || rev == null || rev === '') return { ok: false, error: 'Missing cwd, path or rev', content: null };
+  const escaped = filePath.replace(/\\/g, '/').replace(/"/g, '\\"').replace(/\$/g, '\\$');
+  const revEscaped = String(rev).replace(/"/g, '\\"').replace(/\$/g, '\\$');
+  try {
+    const { stdout } = await execAsync('git show "' + revEscaped + ':' + escaped + '"', { cwd, maxBuffer: 1024 * 1024 });
+    return { ok: true, content: stdout };
+  } catch (_) {
+    return { ok: true, content: '' };
+  }
+});
+
+ipcMain.handle('git-file-history', async (_event, cwd, filePath) => {
+  if (!cwd || !filePath) return { ok: false, error: 'Missing cwd or path', commits: [] };
+  const escaped = filePath.replace(/\\/g, '/').replace(/"/g, '\\"').replace(/\$/g, '\\$');
+  try {
+    const { stdout } = await execAsync('git log -50 --format=%h%x00%s%x00%ci%x00%an -- "' + escaped + '"', { cwd, maxBuffer: 256 * 1024 });
+    const commits = stdout.split(/\r?\n/).filter(Boolean).map((line) => {
+      const parts = line.split('\0');
+      return {
+        shortHash: parts[0] || '',
+        subject: parts[1] || '',
+        date: parts[2] || '',
+        author: parts[3] || '',
+      };
+    });
+    return { ok: true, commits };
+  } catch (err) {
+    return { ok: false, error: err.message, commits: [] };
+  }
+});
+
 ipcMain.handle('compute-diff', (_event, oldText, newText) => {
   const chunks = diff.diffLines(oldText || '', newText || '');
   return chunks.map((c) => ({
