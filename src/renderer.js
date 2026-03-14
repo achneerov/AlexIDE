@@ -1535,8 +1535,7 @@
       const height = Math.max(MIN_PANEL_HEIGHT, Math.min(max, h));
       terminalPanel.style.height = height + 'px';
       localStorage.setItem(PANEL_HEIGHT_KEY, String(height));
-      var active = getActiveTerminal();
-      if (active && active.fitAddon) active.fitAddon.fit();
+      scheduleTerminalFit();
     }
 
     function setPanelCollapsed(collapsed) {
@@ -1546,10 +1545,7 @@
       localStorage.setItem(PANEL_COLLAPSED_KEY, collapsed ? '1' : '0');
       panelToggle.textContent = collapsed ? '+' : '−';
       panelToggle.setAttribute('aria-label', collapsed ? 'Show terminal panel' : 'Minimize terminal panel');
-      if (!collapsed) {
-        var active = getActiveTerminal();
-        if (active && active.fitAddon) setTimeout(function () { active.fitAddon.fit(); }, 0);
-      }
+      if (!collapsed) scheduleTerminalFit();
     }
 
     function togglePanel() {
@@ -1563,14 +1559,34 @@
       else terminalTabsEl.classList.remove('visible');
     }
 
+    var terminalFitScheduled = false;
+    function scheduleTerminalFit() {
+      if (terminalFitScheduled) return;
+      terminalFitScheduled = true;
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          terminalFitScheduled = false;
+          var active = getActiveTerminal();
+          if (active && active.fitAddon && active.xterm && !terminalPanel.classList.contains('collapsed')) {
+            try {
+              active.fitAddon.fit();
+              if (typeof active.xterm.scrollToBottom === 'function') {
+                active.xterm.scrollToBottom();
+              }
+              terminalAPI.resize(active.id, active.xterm.cols, active.xterm.rows);
+            } catch (_) {}
+          }
+        });
+      });
+    }
+
     function setActiveTerminal(terminalId) {
       activeTerminalId = terminalId;
       terminals.forEach(function (t) {
         t.containerEl.classList.toggle('active', t.id === terminalId);
         t.tabEl.classList.toggle('active', t.id === terminalId);
       });
-      var active = getActiveTerminal();
-      if (active && active.fitAddon) setTimeout(function () { active.fitAddon.fit(); }, 0);
+      scheduleTerminalFit();
     }
 
     function closeTerminal(terminalId) {
@@ -1594,6 +1610,27 @@
       updateTerminalTabBarVisibility();
     }
 
+    function flushTerminalWriteBuffer(term) {
+      if (!term.xterm || !term.writeBuffer || term.writeBuffer.length === 0) return;
+      term.rafScheduled = false;
+      var s = term.writeBuffer.join('');
+      term.writeBuffer.length = 0;
+      try {
+        term.xterm.write(s);
+      } catch (_) {}
+    }
+
+    function scheduleTerminalWrite(term, data) {
+      if (!term.writeBuffer) term.writeBuffer = [];
+      term.writeBuffer.push(data);
+      if (term.rafScheduled) return;
+      term.rafScheduled = true;
+      var t = term;
+      requestAnimationFrame(function () {
+        flushTerminalWriteBuffer(t);
+      });
+    }
+
     function createTerminalUIAndBackend(cwd) {
       const Terminal = window.Terminal;
       const FitAddonCtor = window.FitAddon?.FitAddon || window.FitAddon;
@@ -1603,22 +1640,31 @@
       terminalView.appendChild(containerEl);
 
       var xterm = new Terminal({
-        theme: { background: '#1e1e1e', foreground: '#cccccc' },
-        fontFamily: 'SF Mono, Monaco, Cascadia Code, Source Code Pro, Menlo, Consolas, monospace',
+        theme: { background: '#1e1e1e', foreground: '#d4d4d4' },
+        fontFamily: 'SF Mono, Monaco, Cascadia Code, Menlo, Consolas, monospace',
         fontSize: 13,
         cursorBlink: true,
+        cursorStyle: 'block',
+        scrollback: 1000,
+        allowProposedApi: false,
       });
       var fitAddon = new FitAddonCtor();
       xterm.loadAddon(fitAddon);
       xterm.open(containerEl);
-      fitAddon.fit();
 
       if (!terminalDataListenerRegistered) {
         terminalAPI.onData(function (terminalId, data) {
           var term = terminals.find(function (t) { return t.id === terminalId; });
-          if (term && term.xterm) term.xterm.write(data);
+          if (term && term.xterm) scheduleTerminalWrite(term, data);
         });
         terminalDataListenerRegistered = true;
+      }
+
+      if (!terminalView._resizeObserver) {
+        terminalView._resizeObserver = new ResizeObserver(function () {
+          scheduleTerminalFit();
+        });
+        terminalView._resizeObserver.observe(terminalView);
       }
 
       terminalAPI.create(cwd || undefined).then(function (res) {
@@ -1652,6 +1698,8 @@
           fitAddon: fitAddon,
           containerEl: containerEl,
           tabEl: tabEl,
+          writeBuffer: [],
+          rafScheduled: false,
         };
         terminals.push(termObj);
         if (activeTerminalId === null) {
@@ -1674,8 +1722,7 @@
             tabEl.setAttribute('aria-label', 'Terminal ' + s);
           });
         }
-        fitAddon.fit();
-        terminalAPI.resize(terminalId, xterm.cols, xterm.rows);
+        scheduleTerminalFit();
       });
       return null;
     }
@@ -1817,11 +1864,7 @@
     });
 
     window.addEventListener('resize', function () {
-      var active = getActiveTerminal();
-      if (active && active.fitAddon && active.xterm && !terminalPanel.classList.contains('collapsed')) {
-        active.fitAddon.fit();
-        terminalAPI.resize(active.id, active.xterm.cols, active.xterm.rows);
-      }
+      scheduleTerminalFit();
     });
   }
 })();
