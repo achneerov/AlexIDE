@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('alexide', {
   showItemInFolder: (filePath) => ipcRenderer.invoke('show-item-in-folder', filePath),
   openInBrowser: (filePath) => ipcRenderer.invoke('open-in-browser', filePath),
   copyToClipboard: (text) => ipcRenderer.invoke('copy-to-clipboard', text),
+  showUnsavedCloseDialog: (fileName) => ipcRenderer.invoke('show-unsaved-close-dialog', fileName),
   listDir: (dirPath) => ipcRenderer.invoke('list-dir', dirPath),
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
   writeFile: (filePath, content) => ipcRenderer.invoke('write-file', filePath, content),

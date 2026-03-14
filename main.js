@@ -348,6 +348,20 @@ ipcMain.handle('copy-to-clipboard', (_event, text) => {
   if (text != null) clipboard.writeText(String(text));
 });
 
+ipcMain.handle('show-unsaved-close-dialog', (event, fileName) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return { response: 2 };
+  const result = dialog.showMessageBoxSync(win, {
+    type: 'warning',
+    message: 'Do you want to save the changes you made to the document "' + (fileName || 'Untitled') + '"?',
+    detail: 'Your changes will be lost if you don\'t save them.',
+    buttons: process.platform === 'darwin' ? ['Save', "Don't Save", 'Cancel'] : ['Save', "Don't Save", 'Cancel'],
+    defaultId: 0,
+    cancelId: 2,
+  });
+  return { response: result.response };
+});
+
 ipcMain.handle('read-file', async (_event, filePath) => {
   try {
     const content = await fs.readFile(filePath, 'utf-8');

@@ -788,13 +788,51 @@ html, body {
 
 .tab .close {
   opacity: 0.6;
-  padding: 0 2px;
+  padding: 0;
   border: none;
   background: none;
   color: inherit;
   cursor: pointer;
   font-size: 14px;
   line-height: 1;
+  width: 1.1em;
+  min-width: 1.1em;
+  height: 1.1em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tab .close .close-x {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.tab .close .close-dot {
+  display: none;
+  font-size: 16px;
+  line-height: 1;
+  font-weight: bold;
+}
+
+.tab .close .close-x {
+  display: inline;
+}
+
+.tab.dirty .close .close-dot {
+  display: inline;
+}
+
+.tab.dirty .close .close-x {
+  display: none;
+}
+
+.tab.dirty .close:hover .close-dot {
+  display: none;
+}
+
+.tab.dirty .close:hover .close-x {
+  display: inline;
 }
 
 .tab .close:hover {

@@ -164,9 +164,10 @@
     function updateTabLabel(filePath) {
       const tab = openTabs.get(filePath);
       if (!tab || !tab.el) return;
-      const name = tab.name + (tab.dirty ? ' •' : '');
+      const name = tab.name;
       const label = tab.el.querySelector('.label');
       if (label) label.textContent = name;
+      tab.el.classList.toggle('dirty', !!tab.dirty);
     }
 
     function addTab(filePath, content, name) {
@@ -190,13 +191,13 @@
       const tabEl = document.createElement('div');
       tabEl.className = 'tab';
       tabEl.dataset.path = filePath;
-      tabEl.innerHTML = '<span class="label">' + escapeHtml(name) + '</span><button type="button" class="close" aria-label="Close">×</button>';
+      tabEl.innerHTML = '<span class="label">' + escapeHtml(name) + '</span><button type="button" class="close" aria-label="Close"><span class="close-dot">•</span><span class="close-x">×</span></button>';
       tab.el = tabEl;
       tabsEl.appendChild(tabEl);
 
       tabEl.querySelector('.close').addEventListener('click', function (e) {
         e.stopPropagation();
-        closeTab(filePath);
+        closeTabWithConfirm(filePath);
       });
       tabEl.addEventListener('click', function () {
         switchToTab(filePath);
@@ -391,6 +392,37 @@
           statusPosition.textContent = 'Ln 1, Col 1';
         }
       }
+    }
+
+    function saveTab(filePath) {
+      const tab = openTabs.get(filePath);
+      if (!tab || tab.isDiff || !tab.model) return Promise.resolve();
+      const content = tab.model.getValue();
+      return writeFile(filePath, content).then(function (res) {
+        if (res.ok) {
+          tab.dirty = false;
+          updateTabLabel(filePath);
+          if (sidebarPanelGit.style.display !== 'none') refreshGitPanel();
+        }
+        return res;
+      });
+    }
+
+    function closeTabWithConfirm(filePathOrKey) {
+      const tab = openTabs.get(filePathOrKey);
+      if (!tab) return;
+      if (tab.isDiff || !tab.dirty) {
+        closeTab(filePathOrKey);
+        return;
+      }
+      var fileName = (tab.name || '').replace(/\s*•\s*$/, '') || filePathOrKey.split(/[/\\]/).pop();
+      window.alexide.showUnsavedCloseDialog(fileName).then(function (result) {
+        if (result.response === 0) {
+          saveTab(filePathOrKey).then(function () { closeTab(filePathOrKey); });
+        } else if (result.response === 1) {
+          closeTab(filePathOrKey);
+        }
+      });
     }
 
     function openFile(filePath, name) {
