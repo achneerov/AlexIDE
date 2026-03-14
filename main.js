@@ -142,6 +142,11 @@ function buildAppMenu() {
       label: 'File',
       submenu: [
         {
+          label: 'New Window',
+          accelerator: 'CmdOrCtrl+Shift+N',
+          click: () => createWindow(),
+        },
+        {
           label: 'Open Folder...',
           accelerator: 'CmdOrCtrl+O',
           click: () => {
