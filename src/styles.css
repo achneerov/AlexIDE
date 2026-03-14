@@ -991,6 +991,32 @@ html, body {
   position: relative;
 }
 
+.editor-empty-state {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.editor-container.editor-empty .editor-empty-state {
+  display: flex;
+}
+
+.editor-container.editor-empty #monaco-root {
+  display: none !important;
+}
+
+.editor-empty-state-text {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0;
+}
+
 #monaco-root {
   position: absolute;
   top: 0;

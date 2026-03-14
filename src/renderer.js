@@ -42,6 +42,8 @@
 
     const sidebarEl = document.querySelector('.sidebar');
     const sidebarResizer = document.getElementById('sidebar-resizer');
+    const editorContainer = document.getElementById('editor-container');
+    const editorEmptyState = document.getElementById('editor-empty-state');
     const monacoRoot = document.getElementById('monaco-root');
     const monacoDiffRoot = document.getElementById('monaco-diff-root');
     const diffViewContent = document.getElementById('diff-view-content');
@@ -479,6 +481,7 @@
       syncExplorerToFile(tab.filePath);
       if (sidebarPanelGit.style.display !== 'none') refreshFileHistory();
       if (tab.isDiff) {
+        if (editorContainer) editorContainer.classList.remove('editor-empty');
         if (monacoRoot) monacoRoot.style.display = 'none';
         if (monacoDiffRoot) monacoDiffRoot.setAttribute('aria-hidden', 'false');
         if (diffViewContent) {
@@ -486,6 +489,7 @@
         }
         statusPosition.textContent = 'Ln 1, Col 1';
       } else {
+        if (editorContainer) editorContainer.classList.remove('editor-empty');
         createEditor();
         if (monacoRoot) monacoRoot.style.display = '';
         if (monacoDiffRoot) monacoDiffRoot.setAttribute('aria-hidden', 'true');
@@ -501,11 +505,6 @@
       if (currentTempTabKey === filePathOrKey) currentTempTabKey = null;
       const idx = tabOrder.indexOf(filePathOrKey);
       if (idx !== -1) tabOrder.splice(idx, 1);
-      if (!tab.isDiff) {
-        tab.model.dispose();
-      }
-      if (tab.el && tab.el.parentNode) tab.el.parentNode.removeChild(tab.el);
-      openTabs.delete(filePathOrKey);
       if (activeFilePath === filePathOrKey) {
         var next = null;
         if (idx !== -1 && tabOrder.length > 0) {
@@ -515,13 +514,15 @@
         if (next) switchToTab(next);
         else {
           activeFilePath = null;
-          if (monacoRoot) monacoRoot.style.display = '';
+          if (editorContainer) editorContainer.classList.add('editor-empty');
+          if (monacoRoot) monacoRoot.style.display = 'none';
           if (monacoDiffRoot) monacoDiffRoot.setAttribute('aria-hidden', 'true');
-          createEditor();
-          editor.setModel(window.monaco.editor.createModel('', 'plaintext'));
           statusPosition.textContent = 'Ln 1, Col 1';
         }
       }
+      if (!tab.isDiff) tab.model.dispose();
+      if (tab.el && tab.el.parentNode) tab.el.parentNode.removeChild(tab.el);
+      openTabs.delete(filePathOrKey);
     }
 
     function saveTab(filePath) {
