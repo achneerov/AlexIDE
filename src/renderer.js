@@ -614,6 +614,7 @@
       wrap.dataset.path = entry.path;
       wrap.dataset.isDir = entry.isDirectory;
       wrap.dataset.depth = depth;
+      wrap.draggable = true;
 
       const row = document.createElement('div');
       row.className = 'tree-item-row';
@@ -625,6 +626,64 @@
         : getFileIcon(entry);
       row.innerHTML = slot1 + slot2 + '<span class="name">' + escapeHtml(entry.name) + '</span>';
       wrap.appendChild(row);
+
+      wrap.addEventListener('dragstart', function (e) {
+        e.dataTransfer.setData('text/plain', entry.path);
+        e.dataTransfer.setData('application/x-tree-path', entry.path);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('isDirectory', entry.isDirectory ? '1' : '0');
+        wrap.classList.add('tree-item-dragging');
+      });
+      wrap.addEventListener('dragend', function () {
+        wrap.classList.remove('tree-item-dragging');
+      });
+
+      if (entry.isDirectory) {
+        row.addEventListener('dragover', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = 'move';
+          wrap.classList.add('tree-item-drop-target');
+        });
+        row.addEventListener('dragleave', function () {
+          wrap.classList.remove('tree-item-drop-target');
+        });
+        row.addEventListener('drop', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          wrap.classList.remove('tree-item-drop-target');
+          var draggedPath = e.dataTransfer.getData('text/plain');
+          if (!draggedPath || draggedPath === entry.path) return;
+          var dropNorm = normPath(entry.path);
+          var draggedNorm = normPath(draggedPath);
+          if (draggedNorm === dropNorm || (draggedNorm.length > dropNorm.length && draggedNorm.indexOf(dropNorm + '/') === 0)) return;
+          var base = draggedPath.replace(/\\/g, '/').split('/').pop();
+          var newPath = (entry.path.replace(/\\/g, '/') + '/' + base).replace(/\/+/g, '/');
+          var tab = openTabs.get(draggedPath);
+          var isDir = e.dataTransfer.getData('isDirectory') === '1';
+          var contentToRestore = (tab && !tab.isDiff && tab.model) ? tab.model.getValue() : null;
+          renamePathAPI(draggedPath, newPath).then(function (res) {
+            if (res.ok) {
+              if (contentToRestore != null) {
+                closeTab(draggedPath);
+                addTab(newPath, contentToRestore, base);
+              } else if (openTabs.has(draggedPath)) {
+                closeTab(draggedPath);
+              }
+              if (isDir) {
+                var draggedNorm = normPath(draggedPath);
+                var toClose = [];
+                openTabs.forEach(function (_t, p) {
+                  var pNorm = normPath(p);
+                  if (pNorm !== draggedNorm && (pNorm === draggedNorm + '/' || pNorm.indexOf(draggedNorm + '/') === 0)) toClose.push(p);
+                });
+                toClose.forEach(function (p) { closeTab(p); });
+              }
+              refreshFileTree();
+            }
+          });
+        });
+      }
 
       if (insertAfterNode) {
         container.insertBefore(wrap, insertAfterNode.nextSibling);
@@ -739,13 +798,29 @@
       if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
     }
 
+    function findFolderNode(dirPath) {
+      if (!fileTreeEl) return null;
+      var norm = normPath(dirPath);
+      var items = fileTreeEl.querySelectorAll('.tree-item.tree-item-dir');
+      for (var i = 0; i < items.length; i++) {
+        if (normPath(items[i].dataset.path) === norm) return items[i];
+      }
+      return null;
+    }
+
     function showNewItemInput(parentDir, kind) {
       removeNewItemInput();
       var wrap = document.createElement('div');
       wrap.className = 'tree-item new-item-inline';
       var row = document.createElement('div');
       row.className = 'tree-item-row';
-      row.style.paddingLeft = '6px';
+      var depth = 0;
+      var parentNorm = normPath(parentDir || projectRoot);
+      var rootNorm = normPath(projectRoot);
+      var isInsideFolder = parentNorm !== rootNorm;
+      var folderNode = isInsideFolder ? findFolderNode(parentDir) : null;
+      if (folderNode) depth = (parseInt(folderNode.dataset.depth, 10) || 0) + 1;
+      row.style.paddingLeft = (depth * 16 + 6) + 'px';
       var spacer = document.createElement('span');
       spacer.className = 'tree-chevron tree-chevron-spacer';
       spacer.setAttribute('aria-hidden', 'true');
@@ -758,7 +833,36 @@
       row.appendChild(spacer);
       row.appendChild(input);
       wrap.appendChild(row);
-      fileTreeEl.insertBefore(wrap, fileTreeEl.firstChild);
+
+      if (isInsideFolder && folderNode) {
+        (function (node) {
+          expandFolderNode(node).then(function () {
+            fileTreeEl.insertBefore(wrap, node.nextSibling);
+          }).catch(function () {
+            fileTreeEl.insertBefore(wrap, fileTreeEl.firstChild);
+          });
+        })(folderNode);
+      } else {
+        fileTreeEl.insertBefore(wrap, fileTreeEl.firstChild);
+      }
+
+      function insertNewFileAtRoot(fullPath, name) {
+        var entries = fileTreeEl.querySelectorAll('.tree-item:not(.new-item-inline)');
+        var lastRootFolder = null;
+        for (var i = 0; i < entries.length; i++) {
+          var el = entries[i];
+          if (el.dataset.depth === '0' && el.dataset.isDir === 'true') lastRootFolder = el;
+        }
+        var newEntry = { path: fullPath, name: name, isDirectory: false };
+        var newItem = createTreeItem(newEntry, 0, fileTreeEl, lastRootFolder);
+        if (!lastRootFolder) fileTreeEl.insertBefore(newItem, fileTreeEl.firstChild);
+      }
+
+      function insertNewFolderAtRoot(fullPath, name) {
+        var newEntry = { path: fullPath, name: name, isDirectory: true };
+        var newItem = createTreeItem(newEntry, 0, fileTreeEl, null);
+        fileTreeEl.insertBefore(newItem, fileTreeEl.firstChild);
+      }
 
       function commit() {
         var name = (input.value || '').trim();
@@ -769,8 +873,15 @@
         var api = kind === 'folder' ? createFolderAPI : createFileAPI;
         api(parentDir, name).then(function (res) {
           removeNewItemInput();
-          if (res.ok) refreshFileTree();
-          else {}
+          if (!res.ok) return;
+          var atRoot = normPath(parentDir || projectRoot) === rootNorm;
+          if (kind === 'folder' && atRoot) {
+            insertNewFolderAtRoot(res.path, name);
+          } else if (kind === 'file' && atRoot) {
+            insertNewFileAtRoot(res.path, name);
+          } else {
+            refreshFileTree();
+          }
         });
       }
 

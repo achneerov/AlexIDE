@@ -812,6 +812,14 @@ html, body {
   background: rgba(255, 255, 255, 0.1);
 }
 
+.tree-item.tree-item-dragging {
+  opacity: 0.6;
+}
+
+.tree-item.tree-item-drop-target .tree-item-row {
+  background: rgba(0, 122, 204, 0.2);
+}
+
 .tree-chevron {
   width: 10px;
   height: 16px;
