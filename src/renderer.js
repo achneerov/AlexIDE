@@ -67,6 +67,13 @@
     const gitUndoAllBtn = document.getElementById('git-undo-all-btn');
     const gitFileHistoryHeader = document.getElementById('git-file-history-header');
     const gitFileHistoryList = document.getElementById('git-file-history-list');
+    const sidebarPanelSearch = document.getElementById('sidebar-panel-search');
+    const searchPlaceholder = document.getElementById('search-placeholder');
+    const searchPanelContent = document.getElementById('search-panel-content');
+    const searchQueryInput = document.getElementById('search-query-input');
+    const searchIncludeFilenames = document.getElementById('search-include-filenames');
+    const searchIncludeContents = document.getElementById('search-include-contents');
+    const searchResults = document.getElementById('search-results');
     const tabsEl = document.getElementById('tabs');
     const statusPosition = document.getElementById('status-position');
     const ideEl = document.querySelector('.ide');
@@ -845,16 +852,161 @@
 
     function switchSidebarTab(panel) {
       const isExplorer = panel === 'explorer';
+      const isGit = panel === 'git';
+      const isSearch = panel === 'search';
       document.getElementById('sidebar-tab-explorer').classList.toggle('open', isExplorer);
       document.getElementById('sidebar-tab-explorer').setAttribute('aria-pressed', isExplorer ? 'true' : 'false');
-      document.getElementById('sidebar-tab-git').classList.toggle('open', !isExplorer);
-      document.getElementById('sidebar-tab-git').setAttribute('aria-pressed', !isExplorer ? 'true' : 'false');
+      document.getElementById('sidebar-tab-git').classList.toggle('open', isGit);
+      document.getElementById('sidebar-tab-git').setAttribute('aria-pressed', isGit ? 'true' : 'false');
+      document.getElementById('sidebar-tab-search').classList.toggle('open', isSearch);
+      document.getElementById('sidebar-tab-search').setAttribute('aria-pressed', isSearch ? 'true' : 'false');
       sidebarPanelExplorer.style.display = isExplorer ? '' : 'none';
-      sidebarPanelGit.style.display = isExplorer ? 'none' : '';
-      if (!isExplorer) refreshGitPanel();
+      sidebarPanelGit.style.display = isGit ? '' : 'none';
+      sidebarPanelSearch.style.display = isSearch ? '' : 'none';
+      if (isGit) refreshGitPanel();
+      if (isSearch) {
+        if (projectRoot) {
+          searchPlaceholder.style.display = 'none';
+          searchPanelContent.style.display = '';
+          if (searchResults) searchResults.innerHTML = '<div class="search-results-empty">Enter a search term and press Enter.</div>';
+          if (searchQueryInput) searchQueryInput.focus();
+        } else {
+          searchPlaceholder.style.display = '';
+          searchPanelContent.style.display = 'none';
+        }
+      }
     }
     document.getElementById('sidebar-tab-explorer').addEventListener('click', function () { switchSidebarTab('explorer'); });
     document.getElementById('sidebar-tab-git').addEventListener('click', function () { switchSidebarTab('git'); });
+    document.getElementById('sidebar-tab-search').addEventListener('click', function () { switchSidebarTab('search'); });
+
+    function getAllFiles(dir) {
+      return listDir(dir).then(function (r) {
+        if (!r.ok) return [];
+        var files = [];
+        var promises = [];
+        (r.entries || []).forEach(function (entry) {
+          var name = entry.name || '';
+          if (name === '.git' || name === 'node_modules') return;
+          if (entry.isDirectory) {
+            promises.push(getAllFiles(entry.path).then(function (sub) {
+              files.push.apply(files, sub);
+            }));
+          } else {
+            files.push(entry.path);
+          }
+        });
+        return Promise.all(promises).then(function () { return files; });
+      });
+    }
+
+    function runSearch() {
+      if (!projectRoot || !searchResults || !searchQueryInput) return;
+      var query = (searchQueryInput.value || '').trim();
+      var includeFilenames = searchIncludeFilenames && searchIncludeFilenames.checked;
+      var includeContents = searchIncludeContents && searchIncludeContents.checked;
+      if (!includeFilenames && !includeContents) {
+        searchResults.innerHTML = '<div class="search-results-empty">Enable at least one option.</div>';
+        return;
+      }
+      if (!query) {
+        searchResults.innerHTML = '<div class="search-results-empty">Enter a search term.</div>';
+        return;
+      }
+      var qLower = query.toLowerCase();
+      searchResults.innerHTML = '<div class="search-results-loading">Searching…</div>';
+      getAllFiles(projectRoot).then(function (allFiles) {
+        var rootNorm = projectRoot.replace(/\\/g, '/').replace(/\/+$/, '');
+        var matched = [];
+        var checkFile = function (filePath) {
+          var pathNorm = filePath.replace(/\\/g, '/');
+          var name = pathNorm.split('/').pop() || '';
+          if (includeFilenames && (name.toLowerCase().indexOf(qLower) !== -1 || pathNorm.toLowerCase().indexOf(qLower) !== -1)) {
+            return true;
+          }
+          if (!includeContents) return false;
+          return readFile(filePath).then(function (res) {
+            if (!res.ok || res.content == null) return false;
+            return res.content.toLowerCase().indexOf(qLower) !== -1;
+          });
+        };
+        var index = 0;
+        var next = function () {
+          if (index >= allFiles.length) {
+            searchResults.innerHTML = '';
+            if (matched.length === 0) {
+              searchResults.innerHTML = '<div class="search-results-empty">No matches.</div>';
+              return;
+            }
+            matched.forEach(function (filePath) {
+              var pathNorm = filePath.replace(/\\/g, '/');
+              var rel = pathNorm.indexOf(rootNorm) === 0 ? pathNorm.slice(rootNorm.length).replace(/^\//, '') : pathNorm;
+              var name = pathNorm.split('/').pop() || rel;
+              var row = document.createElement('div');
+              row.className = 'search-result-row';
+              row.textContent = rel;
+              row.title = filePath;
+              row.addEventListener('click', function () {
+                openFile(filePath, name, { temp: true });
+              });
+              searchResults.appendChild(row);
+            });
+            return;
+          }
+          var filePath = allFiles[index++];
+          var pathNorm = filePath.replace(/\\/g, '/');
+          var name = pathNorm.split('/').pop() || '';
+          if (includeFilenames && (name.toLowerCase().indexOf(qLower) !== -1 || pathNorm.toLowerCase().indexOf(qLower) !== -1)) {
+            matched.push(filePath);
+            next();
+            return;
+          }
+          if (!includeContents) {
+            next();
+            return;
+          }
+          readFile(filePath).then(function (res) {
+            if (res.ok && res.content != null && res.content.toLowerCase().indexOf(qLower) !== -1) {
+              matched.push(filePath);
+            }
+            next();
+          }).catch(function () { next(); });
+        };
+        next();
+      }).catch(function () {
+        searchResults.innerHTML = '<div class="search-results-empty">Search failed.</div>';
+      });
+    }
+
+    var searchDebounceTimer = null;
+    if (searchQueryInput) {
+      searchQueryInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          runSearch();
+        }
+      });
+      searchQueryInput.addEventListener('input', function () {
+        if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(runSearch, 320);
+      });
+    }
+    if (searchIncludeFilenames) {
+      searchIncludeFilenames.addEventListener('change', runSearch);
+    }
+    if (searchIncludeContents) {
+      searchIncludeContents.addEventListener('change', runSearch);
+    }
+
+    document.addEventListener('keydown', function (e) {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'f') {
+        e.preventDefault();
+        switchSidebarTab('search');
+        if (searchQueryInput) {
+          searchQueryInput.focus();
+        }
+      }
+    });
 
     function gitIconAdd() {
       const span = document.createElement('span');

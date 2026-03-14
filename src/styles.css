@@ -346,6 +346,93 @@ html, body {
   min-height: 0;
 }
 
+/* Search panel */
+.search-panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  min-height: 0;
+  height: 100%;
+}
+
+.search-input-row {
+  flex-shrink: 0;
+}
+
+.search-query-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--fg-sidebar);
+  background: var(--bg-editor);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.search-query-input::placeholder {
+  color: #858585;
+}
+
+.search-query-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.search-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.search-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--fg-sidebar);
+  cursor: pointer;
+}
+
+.search-checkbox {
+  margin: 0;
+  cursor: pointer;
+}
+
+.search-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.search-result-row {
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--fg-sidebar);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-result-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+  margin: 0 -4px;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.search-results-empty,
+.search-results-loading {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 8px 0;
+}
+
 /* Git panel */
 .git-panel-content {
   display: flex;

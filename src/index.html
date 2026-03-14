@@ -17,6 +17,7 @@
           <div class="sidebar-tabs">
             <button type="button" class="sidebar-tab open" id="sidebar-tab-explorer" aria-pressed="true">Folder</button>
             <button type="button" class="sidebar-tab" id="sidebar-tab-git" aria-pressed="false">Git</button>
+            <button type="button" class="sidebar-tab" id="sidebar-tab-search" aria-pressed="false">Search</button>
           </div>
         </div>
         <div class="sidebar-content">
@@ -70,6 +71,21 @@
                 </div>
                 <div class="git-section-body" id="git-file-history-list"></div>
               </div>
+            </div>
+          </div>
+          <div id="sidebar-panel-search" class="sidebar-panel" style="display: none;">
+            <div id="search-placeholder" class="placeholder">
+              <p>Open a folder to search.</p>
+            </div>
+            <div id="search-panel-content" class="search-panel-content" style="display: none;">
+              <div class="search-input-row">
+                <input type="text" id="search-query-input" class="search-query-input" placeholder="Search…" aria-label="Search query" />
+              </div>
+              <div class="search-options">
+                <label class="search-checkbox-label"><input type="checkbox" id="search-include-filenames" class="search-checkbox" checked /> Include filenames</label>
+                <label class="search-checkbox-label"><input type="checkbox" id="search-include-contents" class="search-checkbox" checked /> Include file contents</label>
+              </div>
+              <div class="search-results" id="search-results"></div>
             </div>
           </div>
         </div>
