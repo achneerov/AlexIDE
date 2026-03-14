@@ -838,13 +838,32 @@
       if (isInsideFolder && folderNode) {
         (function (node) {
           expandFolderNode(node).then(function () {
-            fileTreeEl.insertBefore(wrap, node.nextSibling);
+            if (kind === 'folder') {
+              fileTreeEl.insertBefore(wrap, node.nextSibling);
+            } else {
+              var lastDir = null;
+              if (node._childNodes) {
+                for (var i = 0; i < node._childNodes.length; i++) {
+                  if (node._childNodes[i].dataset.isDir === 'true') lastDir = node._childNodes[i];
+                }
+              }
+              fileTreeEl.insertBefore(wrap, lastDir ? lastDir.nextSibling : node.nextSibling);
+            }
           }).catch(function () {
             fileTreeEl.insertBefore(wrap, fileTreeEl.firstChild);
           });
         })(folderNode);
       } else {
-        fileTreeEl.insertBefore(wrap, fileTreeEl.firstChild);
+        if (kind === 'folder') {
+          fileTreeEl.insertBefore(wrap, fileTreeEl.firstChild);
+        } else {
+          var entries = fileTreeEl.querySelectorAll('.tree-item:not(.new-item-inline)');
+          var lastRootFolder = null;
+          for (var i = 0; i < entries.length; i++) {
+            if (entries[i].dataset.depth === '0' && entries[i].dataset.isDir === 'true') lastRootFolder = entries[i];
+          }
+          fileTreeEl.insertBefore(wrap, lastRootFolder ? lastRootFolder.nextSibling : fileTreeEl.firstChild);
+        }
       }
 
       function insertNewFileAtRoot(fullPath, name) {
