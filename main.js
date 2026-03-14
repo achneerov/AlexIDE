@@ -413,15 +413,27 @@ ipcMain.handle('git-status', async (_event, cwd) => {
   try {
     const { stdout } = await execAsync('git status --porcelain -uall', { cwd, maxBuffer: 1024 * 1024 });
     const { staged, unstaged } = parsePorcelain(stdout);
+    let currentBranch = null;
+    try {
+      const { stdout: branchOut } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd, maxBuffer: 4096 });
+      currentBranch = branchOut.trim() || null;
+    } catch (_) {}
+    let hasUpstream = false;
     let aheadCount = 0;
     try {
-      const { stdout: countOut } = await execAsync('git rev-list --count @{u}..HEAD', { cwd, maxBuffer: 4096 });
-      const n = parseInt(countOut.trim(), 10);
-      if (Number.isFinite(n) && n > 0) aheadCount = n;
+      await execAsync('git rev-parse -q --verify @{u}', { cwd, maxBuffer: 4096 });
+      hasUpstream = true;
     } catch (_) {}
-    return { ok: true, isRepo: true, staged, unstaged, aheadCount };
+    if (hasUpstream) {
+      try {
+        const { stdout: countOut } = await execAsync('git rev-list --count @{u}..HEAD', { cwd, maxBuffer: 4096 });
+        const n = parseInt(countOut.trim(), 10);
+        if (Number.isFinite(n) && n > 0) aheadCount = n;
+      } catch (_) {}
+    }
+    return { ok: true, isRepo: true, staged, unstaged, aheadCount, hasUpstream, currentBranch };
   } catch (err) {
-    return { ok: false, error: err.message, isRepo: true, staged: [], unstaged: [], aheadCount: 0 };
+    return { ok: false, error: err.message, isRepo: true, staged: [], unstaged: [], aheadCount: 0, hasUpstream: false, currentBranch: null };
   }
 });
 
@@ -483,6 +495,17 @@ ipcMain.handle('git-push', async (_event, cwd) => {
   if (!cwd) return { ok: false, error: 'No folder' };
   try {
     await execAsync('git push', { cwd, maxBuffer: 1024 * 1024 });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('git-push-set-upstream', async (_event, cwd, branch) => {
+  if (!cwd || !branch || !branch.trim()) return { ok: false, error: 'No folder or branch' };
+  try {
+    const b = branch.trim().replace(/"/g, '\\"').replace(/\$/g, '\\$');
+    await execAsync('git push -u origin "' + b + '"', { cwd, maxBuffer: 1024 * 1024 });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };

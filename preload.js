@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('alexide', {
     restore: (cwd, filePath) => ipcRenderer.invoke('git-restore', cwd, filePath),
     commit: (cwd, message) => ipcRenderer.invoke('git-commit', cwd, message),
     push: (cwd) => ipcRenderer.invoke('git-push', cwd),
+    pushSetUpstream: (cwd, branch) => ipcRenderer.invoke('git-push-set-upstream', cwd, branch),
     fileHistory: (cwd, filePath) => ipcRenderer.invoke('git-file-history', cwd, filePath),
   },
   diff: {

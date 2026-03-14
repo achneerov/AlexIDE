@@ -1219,11 +1219,21 @@
         const staged = res.staged || [];
         const unstaged = res.unstaged || [];
         const aheadCount = res.aheadCount != null ? res.aheadCount : 0;
+        const hasUpstream = res.hasUpstream !== false;
+        const currentBranch = res.currentBranch || null;
         gitStagedCount.textContent = String(staged.length);
         gitPendingCount.textContent = String(unstaged.length);
 
         gitCommitBtn.disabled = staged.length === 0;
-        gitPushBtn.disabled = aheadCount === 0;
+        if (hasUpstream) {
+          gitPushBtn.textContent = 'Push';
+          gitPushBtn.disabled = aheadCount === 0;
+        } else {
+          gitPushBtn.textContent = 'Publish Branch';
+          gitPushBtn.disabled = !currentBranch;
+        }
+        gitPushBtn.dataset.hasUpstream = hasUpstream ? '1' : '0';
+        gitPushBtn.dataset.currentBranch = currentBranch || '';
 
         gitUnstageAllBtn.style.display = staged.length > 0 ? '' : 'none';
 
@@ -1439,11 +1449,14 @@
 
     gitPushBtn.addEventListener('click', function () {
       if (!projectRoot || !gitAPI) return;
-      gitAPI.push(projectRoot).then(function (res) {
+      var hasUpstream = gitPushBtn.dataset.hasUpstream === '1';
+      var branch = gitPushBtn.dataset.currentBranch || '';
+      var promise = hasUpstream ? gitAPI.push(projectRoot) : gitAPI.pushSetUpstream(projectRoot, branch);
+      promise.then(function (res) {
         if (res.ok) {
           refreshGitPanel();
         } else {
-          {}
+          if (res.error) console.warn('Git push failed:', res.error);
         }
       });
     });
@@ -1480,6 +1493,10 @@
       if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         saveCurrent();
+      } else if (e.key === 'w' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+        if (document.activeElement && (document.activeElement.closest('input') || document.activeElement.closest('textarea'))) return;
+        e.preventDefault();
+        if (activeFilePath) closeTabWithConfirm(activeFilePath);
       }
     });
 
