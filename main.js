@@ -29,6 +29,40 @@ function createWindow() {
   win.once('ready-to-show', () => win.show());
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
 
+  win.webContents.on('context-menu', async (event, params) => {
+    event.preventDefault();
+    const x = params.x;
+    const y = params.y;
+    let context = null;
+    try {
+      context = await win.webContents.executeJavaScript('window.__lastExplorerContextMenuContext || null');
+    } catch (_) {}
+    if (!context || !context.projectRoot) {
+      return;
+    }
+    const { targetPath, parentDir, hasItem } = context;
+    const revealLabel = process.platform === 'darwin' ? 'Reveal in Finder' : (process.platform === 'win32' ? 'Show in Explorer' : 'Reveal in File Manager');
+    const template = [
+      { label: 'New File', click: () => win.webContents.send('explorer-context-action', { action: 'new-file', parentDir: parentDir || targetPath }) },
+      { label: 'New Folder', click: () => win.webContents.send('explorer-context-action', { action: 'new-folder', parentDir: parentDir || targetPath }) },
+      { type: 'separator' },
+    ];
+    if (hasItem) {
+      template.push(
+        { label: revealLabel, click: () => { try { shell.showItemInFolder(path.resolve(targetPath)); } catch (_) {} } },
+        { label: 'Open in Default App', click: () => { try { shell.openExternal(pathToFileURL(path.resolve(targetPath)).href); } catch (_) {} } },
+        { label: 'Copy Absolute Path', click: () => { clipboard.writeText(targetPath); } },
+        { type: 'separator' },
+        { label: 'Rename', click: () => win.webContents.send('explorer-context-action', { action: 'rename', targetPath }) },
+        { label: 'Delete', click: () => win.webContents.send('explorer-context-action', { action: 'delete', targetPath }) }
+      );
+    }
+    const menu = Menu.buildFromTemplate(template);
+    const popupOpts = { window: win, x, y };
+    if (process.platform === 'darwin') popupOpts.positioningItem = 0;
+    menu.popup(popupOpts);
+  });
+
   win.on('closed', () => {
     const winMap = terminalPtyMap.get(win.id);
     if (winMap) {
@@ -200,6 +234,15 @@ function buildAppMenu() {
           click: () => {
             const win = BrowserWindow.getFocusedWindow();
             if (win && !win.isDestroyed()) win.webContents.send('menu-toggle-terminal');
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Toggle Developer Tools',
+          accelerator: process.platform === 'darwin' ? 'Alt+Cmd+I' : 'Ctrl+Shift+I',
+          click: () => {
+            const win = BrowserWindow.getFocusedWindow();
+            if (win && !win.isDestroyed()) win.webContents.toggleDevTools();
           },
         },
       ],

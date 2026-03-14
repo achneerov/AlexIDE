@@ -622,96 +622,59 @@
       requestAnimationFrame(function () { input.focus(); });
     }
 
+    window.alexide.onExplorerContextAction(function (payload) {
+      var action = payload.action;
+      var targetPath = payload.targetPath;
+      var parentDir = payload.parentDir;
+      if (action === 'new-file') {
+        showNewItemInput(parentDir || projectRoot, 'file');
+      } else if (action === 'new-folder') {
+        showNewItemInput(parentDir || projectRoot, 'folder');
+      } else if (action === 'rename' && targetPath) {
+        var currentName = targetPath.replace(/\\/g, '/').split('/').pop();
+        var newName = prompt('Enter new name', currentName);
+        if (!newName || !newName.trim() || newName === currentName) return;
+        var newPath = getParentPath(targetPath) + '/' + newName.trim();
+        renamePathAPI(targetPath, newPath).then(function (res) {
+          if (res.ok) {
+            if (openTabs.has(targetPath)) closeTab(targetPath);
+            refreshFileTree();
+          }
+        });
+      } else if (action === 'delete' && targetPath) {
+        var label = targetPath.replace(/\\/g, '/').split('/').pop();
+        if (!confirm('Delete "' + label + '"?')) return;
+        deletePathAPI(targetPath).then(function (res) {
+          if (res.ok) {
+            var targetNorm = targetPath.replace(/\\/g, '/');
+            var toClose = [];
+            openTabs.forEach(function (_tab, path) {
+              var p = path.replace(/\\/g, '/');
+              if (p === targetNorm || p.startsWith(targetNorm + '/')) toClose.push(path);
+            });
+            toClose.forEach(function (path) { closeTab(path); });
+            refreshFileTree();
+          }
+        });
+      }
+    });
+
+    document.documentElement.addEventListener('contextmenu', function () {
+      window.__lastExplorerContextMenuContext = null;
+    }, true);
+
     sidebarPanelExplorer.addEventListener('contextmenu', function (e) {
       if (!projectRoot || fileTreeEl.style.display !== 'block') return;
-      e.preventDefault();
       var item = e.target.closest('.tree-item');
       var targetPath = item ? item.dataset.path : projectRoot;
       var isDir = item ? (item.dataset.isDir === 'true') : true;
       var parentDir = isDir ? targetPath : getParentPath(targetPath);
-
-      explorerContextMenu.innerHTML = '';
-      function addItem(label, fn) {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'context-menu-item';
-        btn.textContent = label;
-        btn.addEventListener('click', function (ev) {
-          ev.preventDefault();
-          closeContextMenu();
-          fn();
-        });
-        explorerContextMenu.appendChild(btn);
-      }
-
-      addItem('New File', function () {
-        showNewItemInput(parentDir, 'file');
-      });
-      addItem('New Folder', function () {
-        showNewItemInput(parentDir, 'folder');
-      });
-
-      if (item) {
-        var revealLabel = window.alexide.platform === 'darwin' ? 'Reveal in Finder' : (window.alexide.platform === 'win32' ? 'Show in Explorer' : 'Reveal in File Manager');
-        addItem(revealLabel, function () {
-          window.alexide.showItemInFolder(targetPath);
-        });
-        addItem('Open in Default App', function () {
-          window.alexide.openInBrowser(targetPath);
-        });
-        addItem('Copy Absolute Path', function () {
-          window.alexide.copyToClipboard(targetPath);
-        });
-        var sep = document.createElement('div');
-        sep.className = 'context-menu-separator';
-        explorerContextMenu.appendChild(sep);
-        addItem('Rename', function () {
-          var currentName = targetPath.replace(/\\/g, '/').split('/').pop();
-          var newName = prompt('Enter new name', currentName);
-          if (!newName || !newName.trim() || newName === currentName) return;
-          var newPath = getParentPath(targetPath) + '/' + newName.trim();
-          renamePathAPI(targetPath, newPath).then(function (res) {
-            if (res.ok) {
-              if (openTabs.has(targetPath)) closeTab(targetPath);
-              refreshFileTree();
-            } else {}
-          });
-        });
-        addItem('Delete', function () {
-          var label = (item.dataset.path || '').replace(/\\/g, '/').split('/').pop();
-          if (!confirm("Delete \"" + label + "\"?")) return;
-          deletePathAPI(targetPath).then(function (res) {
-            if (res.ok) {
-              var targetNorm = targetPath.replace(/\\/g, '/');
-              var toClose = [];
-              openTabs.forEach(function (_tab, path) {
-                var p = path.replace(/\\/g, '/');
-                if (p === targetNorm || p.startsWith(targetNorm + '/')) toClose.push(path);
-              });
-              toClose.forEach(function (path) { closeTab(path); });
-              refreshFileTree();
-            } else {}
-          });
-        });
-      }
-
-      if (explorerContextMenu.parentNode !== document.body) document.body.appendChild(explorerContextMenu);
-      explorerContextMenu.setAttribute('aria-hidden', 'false');
-      var x = e.clientX;
-      var y = e.clientY;
-      explorerContextMenu.style.left = x + 'px';
-      explorerContextMenu.style.top = y + 'px';
-      requestAnimationFrame(function () {
-        var rect = explorerContextMenu.getBoundingClientRect();
-        if (rect.right > window.innerWidth) explorerContextMenu.style.left = (window.innerWidth - rect.width) + 'px';
-        if (rect.bottom > window.innerHeight) explorerContextMenu.style.top = (window.innerHeight - rect.height) + 'px';
-      });
-      function onOutside(ev) {
-        if (explorerContextMenu.contains(ev.target)) return;
-        closeContextMenu();
-      }
-      explorerContextMenu._outsideHandler = onOutside;
-      document.addEventListener('mousedown', onOutside);
+      window.__lastExplorerContextMenuContext = {
+        projectRoot: projectRoot,
+        targetPath: targetPath,
+        parentDir: parentDir,
+        hasItem: !!item,
+      };
     });
 
     function switchSidebarTab(panel) {

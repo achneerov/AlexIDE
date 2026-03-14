@@ -2,11 +2,15 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 let onMenuOpenFolder = null;
 let onMenuToggleTerminal = null;
+let onExplorerContextAction = null;
 ipcRenderer.on('menu-open-folder', () => {
   if (typeof onMenuOpenFolder === 'function') onMenuOpenFolder();
 });
 ipcRenderer.on('menu-toggle-terminal', () => {
   if (typeof onMenuToggleTerminal === 'function') onMenuToggleTerminal();
+});
+ipcRenderer.on('explorer-context-action', (_event, payload) => {
+  if (typeof onExplorerContextAction === 'function') onExplorerContextAction(payload);
 });
 
 contextBridge.exposeInMainWorld('alexide', {
@@ -15,6 +19,8 @@ contextBridge.exposeInMainWorld('alexide', {
   openFolder: () => ipcRenderer.invoke('open-folder'),
   onMenuOpenFolder: (fn) => { onMenuOpenFolder = fn; },
   onMenuToggleTerminal: (fn) => { onMenuToggleTerminal = fn; },
+  onExplorerContextAction: (fn) => { onExplorerContextAction = fn; },
+  showExplorerContextMenu: (data) => ipcRenderer.invoke('show-explorer-context-menu', data),
   showItemInFolder: (filePath) => ipcRenderer.invoke('show-item-in-folder', filePath),
   openInBrowser: (filePath) => ipcRenderer.invoke('open-in-browser', filePath),
   copyToClipboard: (text) => ipcRenderer.invoke('copy-to-clipboard', text),
