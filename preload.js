@@ -47,6 +47,8 @@ contextBridge.exposeInMainWorld('alexide', {
     status: (cwd) => ipcRenderer.invoke('git-status', cwd),
     branches: (cwd) => ipcRenderer.invoke('git-branches', cwd),
     checkout: (cwd, branch) => ipcRenderer.invoke('git-checkout', cwd, branch),
+    stash: (cwd) => ipcRenderer.invoke('git-stash', cwd),
+    showStashCommandDialog: () => ipcRenderer.invoke('show-stash-command-dialog'),
     showIndex: (cwd, filePath) => ipcRenderer.invoke('git-show-index', cwd, filePath),
     showHead: (cwd, filePath) => ipcRenderer.invoke('git-show-head', cwd, filePath),
     showRevision: (cwd, filePath, rev) => ipcRenderer.invoke('git-show-revision', cwd, filePath, rev),

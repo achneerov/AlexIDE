@@ -551,8 +551,33 @@ ipcMain.handle('git-checkout', async (_event, cwd, branch) => {
     await execAsync('git checkout "' + b + '"', { cwd, maxBuffer: 4096 });
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err.message };
+    const msg = (err.stderr && (typeof err.stderr === 'string' ? err.stderr : err.stderr.toString())) || err.message || '';
+    return { ok: false, error: msg.trim() || err.message };
   }
+});
+
+ipcMain.handle('git-stash', async (_event, cwd) => {
+  if (!cwd) return { ok: false, error: 'No folder' };
+  try {
+    await execAsync('git stash', { cwd, maxBuffer: 4096 });
+    return { ok: true };
+  } catch (err) {
+    const msg = (err.stderr && (typeof err.stderr === 'string' ? err.stderr : err.stderr.toString())) || err.message || '';
+    return { ok: false, error: msg.trim() || err.message };
+  }
+});
+
+ipcMain.handle('show-stash-command-dialog', (event) => {
+  let win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) win = BrowserWindow.getFocusedWindow();
+  if (!win || win.isDestroyed()) return;
+  dialog.showMessageBoxSync(win, {
+    type: 'info',
+    message: 'Uncommitted changes would be overwritten by switching branches.',
+    detail: 'Run this command in the terminal to stash your changes, then switch branches:\n\n  git stash',
+    buttons: ['Close'],
+    defaultId: 0,
+  });
 });
 
 ipcMain.handle('git-show-index', async (_event, cwd, filePath) => {

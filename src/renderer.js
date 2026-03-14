@@ -1742,11 +1742,21 @@
           btn.setAttribute('role', 'option');
           btn.addEventListener('click', function () {
             if (branch === current) { closeBranchDropdown(); return; }
-            gitAPI.checkout(projectRoot, branch).then(function (checkoutRes) {
-              closeBranchDropdown();
+            var targetBranch = branch;
+            gitAPI.checkout(projectRoot, targetBranch).then(function (checkoutRes) {
               if (checkoutRes.ok) {
+                closeBranchDropdown();
                 refreshBranchSwitcher();
                 refreshGitPanel();
+                return;
+              }
+              var errMsg = (checkoutRes.error || '').toLowerCase();
+              var needsStash = errMsg.indexOf('overwritten') !== -1 || errMsg.indexOf('your local changes') !== -1 || (errMsg.indexOf('stash') !== -1 && errMsg.indexOf('commit') !== -1);
+              if (needsStash) {
+                closeBranchDropdown();
+                window.alexide.git.showStashCommandDialog();
+              } else {
+                closeBranchDropdown();
               }
             });
           });
