@@ -37,25 +37,39 @@ function createWindow() {
     try {
       context = await win.webContents.executeJavaScript('window.__lastExplorerContextMenuContext || null');
     } catch (_) {}
-    if (!context || !context.projectRoot) {
-      return;
-    }
-    const { targetPath, parentDir, hasItem } = context;
-    const revealLabel = process.platform === 'darwin' ? 'Reveal in Finder' : (process.platform === 'win32' ? 'Show in Explorer' : 'Reveal in File Manager');
-    const template = [
-      { label: 'New File', click: () => win.webContents.send('explorer-context-action', { action: 'new-file', parentDir: parentDir || targetPath }) },
-      { label: 'New Folder', click: () => win.webContents.send('explorer-context-action', { action: 'new-folder', parentDir: parentDir || targetPath }) },
-      { type: 'separator' },
-    ];
-    if (hasItem) {
-      template.push(
-        { label: revealLabel, click: () => { try { shell.showItemInFolder(path.resolve(targetPath)); } catch (_) {} } },
-        { label: 'Open in Default App', click: () => { try { shell.openExternal(pathToFileURL(path.resolve(targetPath)).href); } catch (_) {} } },
-        { label: 'Copy Absolute Path', click: () => { clipboard.writeText(targetPath); } },
+    let template;
+    if (context && context.projectRoot) {
+      const { targetPath, parentDir, hasItem } = context;
+      const revealLabel = process.platform === 'darwin' ? 'Reveal in Finder' : (process.platform === 'win32' ? 'Show in Explorer' : 'Reveal in File Manager');
+      template = [
+        { label: 'New File', click: () => win.webContents.send('explorer-context-action', { action: 'new-file', parentDir: parentDir || targetPath }) },
+        { label: 'New Folder', click: () => win.webContents.send('explorer-context-action', { action: 'new-folder', parentDir: parentDir || targetPath }) },
         { type: 'separator' },
-        { label: 'Rename', click: () => win.webContents.send('explorer-context-action', { action: 'rename', targetPath }) },
-        { label: 'Delete', click: () => win.webContents.send('explorer-context-action', { action: 'delete', targetPath }) }
-      );
+      ];
+      if (hasItem) {
+        template.push(
+          { label: revealLabel, click: () => { try { shell.showItemInFolder(path.resolve(targetPath)); } catch (_) {} } },
+          { label: 'Open in Default App', click: () => { try { shell.openExternal(pathToFileURL(path.resolve(targetPath)).href); } catch (_) {} } },
+          { label: 'Copy Absolute Path', click: () => { clipboard.writeText(targetPath); } },
+          { type: 'separator' },
+          { label: 'Rename', click: () => win.webContents.send('explorer-context-action', { action: 'rename', targetPath }) },
+          { label: 'Delete', click: () => win.webContents.send('explorer-context-action', { action: 'delete', targetPath }) }
+        );
+      }
+    } else {
+      template = [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'pasteAndMatchStyle' },
+        { type: 'separator' },
+        { role: 'selectAll' },
+        { type: 'separator' },
+        { label: process.platform === 'darwin' ? 'Inspect Element' : 'Inspect', click: () => win.webContents.inspectElement(x, y) },
+      ];
     }
     const menu = Menu.buildFromTemplate(template);
     const popupOpts = { window: win, x, y };

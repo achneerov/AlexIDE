@@ -114,6 +114,7 @@
         minimap: { enabled: true },
         scrollBeyondLastLine: false,
         wordWrap: 'off',
+        contextmenu: false,
       });
       editor.onDidChangeCursorPosition(function (e) {
         const pos = e.position;
