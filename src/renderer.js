@@ -1795,6 +1795,7 @@
                 closeBranchDropdown();
                 refreshBranchSwitcher();
                 refreshGitPanel();
+                refreshFileTree();
                 return;
               }
               var errMsg = (checkoutRes.error || '').toLowerCase();
