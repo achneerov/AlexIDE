@@ -1843,8 +1843,12 @@
       refreshBranchSwitcher();
     });
     setInterval(function () {
-      if (projectRoot) refreshBranchSwitcher();
-    }, 500);
+      if (!projectRoot) return;
+      refreshBranchSwitcher();
+      if (sidebarPanelGit && sidebarPanelGit.style.display !== 'none') {
+        refreshGitPanel();
+      }
+    }, 2000);
 
     panelResizer.addEventListener('mousedown', function (e) {
       if (e.button !== 0) return;
