@@ -1,0 +1,7 @@
+{
+  "name": "image-viewer",
+  "version": "1.0.0",
+  "main": "index.js",
+  "description": "Preview image files (JPEG, PNG, GIF, WebP)",
+  "enabled": true
+}

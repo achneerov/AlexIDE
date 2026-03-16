@@ -9,30 +9,32 @@
     });
   }
 
-  const BASE = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min';
-
-  require.config({
-    baseUrl: BASE,
-    paths: { vs: BASE + '/vs' },
-    'vs/nls': { availableLanguages: {} },
-  });
-
-  window.MonacoEnvironment = {
-    getWorkerUrl: function (_workerId, label) {
-      if (label === 'json') return BASE + '/vs/language/json/json.worker.js';
-      if (label === 'css' || label === 'scss' || label === 'less') return BASE + '/vs/language/css/css.worker.js';
-      if (label === 'html' || label === 'handlebars' || label === 'razor') return BASE + '/vs/language/html/html.worker.js';
-      if (label === 'typescript' || label === 'javascript') return BASE + '/vs/language/typescript/ts.worker.js';
-      return BASE + '/vs/editor/editor.worker.js';
-    },
-  };
-
-  require(['vs/editor/editor.main'], function () {
-    initApp();
-  });
+  function initMonacoAndApp() {
+    var basePromise = (window.alexide && typeof window.alexide.getMonacoBaseUrl === 'function')
+      ? window.alexide.getMonacoBaseUrl()
+      : Promise.resolve('https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/');
+    basePromise.then(function (MONACO_MIN) {
+      if (!MONACO_MIN) MONACO_MIN = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/';
+      if (!/\/$/.test(MONACO_MIN)) MONACO_MIN += '/';
+      require.config({
+        baseUrl: MONACO_MIN,
+        paths: { vs: MONACO_MIN + 'vs' },
+        'vs/nls': { availableLanguages: {} },
+      });
+      window.MonacoEnvironment = {
+        getWorkerUrl: function (_workerId, label) {
+          return MONACO_MIN + 'vs/base/worker/workerMain.js';
+        },
+      };
+      require(['vs/editor/editor.main'], function () {
+        initApp();
+      });
+    });
+  }
+  initMonacoAndApp();
 
   function initApp() {
-    const { openFolder, listDir, readFile, writeFile, createFile: createFileAPI, createFolder: createFolderAPI, renamePath: renamePathAPI, deletePath: deletePathAPI, terminal: terminalAPI, git: gitAPI } = window.alexide;
+    const { openFolder, listDir, readFile, writeFile, getExtensionsList, setExtensionEnabled, createFile: createFileAPI, createFolder: createFolderAPI, renamePath: renamePathAPI, deletePath: deletePathAPI, terminal: terminalAPI, git: gitAPI } = window.alexide;
     let projectRoot = null;
     let editor = null;
     const openTabs = new Map();
@@ -76,6 +78,9 @@
     const searchIncludeFilenames = document.getElementById('search-include-filenames');
     const searchIncludeContents = document.getElementById('search-include-contents');
     const searchResults = document.getElementById('search-results');
+    const extensionsPlaceholder = document.getElementById('extensions-placeholder');
+    const extensionsListContainer = document.getElementById('extensions-list-container');
+    const extensionsList = document.getElementById('extensions-list');
     const tabsEl = document.getElementById('tabs');
     const statusPosition = document.getElementById('status-position');
     const ideEl = document.querySelector('.ide');
@@ -87,6 +92,14 @@
     const terminalView = document.getElementById('terminal-view');
     const terminalTabsEl = document.getElementById('terminal-tabs');
     const panelAddTerminalBtn = document.getElementById('panel-add-terminal');
+    const extensionViewRoot = document.getElementById('extension-view-root');
+    const editorToolbar = document.getElementById('editor-toolbar');
+    const editorToolbarPreview = document.getElementById('editor-toolbar-preview');
+    const editorToolbarCode = document.getElementById('editor-toolbar-code');
+
+    var fileViewers = [];
+    var diagnosticProviders = {};
+    const ALEXIDE_EXT_DIR = '.alexide/extensions';
 
     var terminals = [];
     var activeTerminalId = null;
@@ -117,6 +130,124 @@
       return map[ext] || 'plaintext';
     }
 
+    function loadOneExtensionDir(extDir, enabledSet) {
+      return listDir(extDir).then(function (list) {
+        if (!list.ok || !list.entries) return [];
+        var dirs = list.entries.filter(function (e) { return e.isDirectory; });
+        return Promise.all(dirs.map(function (dir) {
+          if (enabledSet !== null && !enabledSet[dir.name]) return Promise.resolve();
+          var dirPath = extDir + '/' + dir.name;
+          var manifestPath = dirPath + '/extension.json';
+          return readFile(manifestPath).then(function (manifestRes) {
+            if (!manifestRes.ok || !manifestRes.content) return;
+            try {
+              var manifest = JSON.parse(manifestRes.content);
+              var main = manifest.main || 'index.js';
+              var mainPath = dirPath + '/' + main;
+              return readFile(mainPath).then(function (scriptRes) {
+                if (!scriptRes.ok || !scriptRes.content) return;
+                var extensionId = dir.name;
+                var alexideExt = {
+                  readFile: readFile,
+                  getFileUrl: window.alexide.getFileUrl,
+                  getFileDataUrl: window.alexide.getFileDataUrl,
+                  getFileArrayBuffer: window.alexide.getFileArrayBuffer,
+                  parseJavaScript: window.alexide.parseJavaScript,
+                    registerFileViewer: function (opts, renderFn) {
+                      var exts = (opts && opts.extensions) || [];
+                      fileViewers.push({ id: extensionId, extensions: exts, render: renderFn });
+                    },
+                  registerDiagnosticProvider: function (languageId, provideFn) {
+                    diagnosticProviders[languageId] = provideFn;
+                  },
+                };
+                try {
+                  var code = (scriptRes.content || '').trim().replace(/;\s*$/, '');
+                  var fn = new Function('alexide', 'return (' + code + ')(alexide);');
+                  fn(alexideExt);
+                } catch (err) {
+                  console.warn('AlexIDE extension ' + extensionId + ' failed to load:', err);
+                }
+              });
+            } catch (_) {
+              return Promise.resolve();
+            }
+          });
+        }));
+      }).catch(function () { return []; });
+    }
+
+    function loadExtensions(root) {
+      fileViewers = [];
+      diagnosticProviders = {};
+      var chain = Promise.resolve();
+      if (window.alexide && typeof window.alexide.getAppPath === 'function') {
+        chain = chain.then(function () {
+          return window.alexide.getAppPath().then(function (appPath) {
+            var builtinDir = (appPath || '').replace(/\\/g, '/') + '/.alexide/extensions';
+            return loadOneExtensionDir(builtinDir, null);
+          }).catch(function () {});
+        });
+      }
+      if (root && getExtensionsList) {
+        chain = chain.then(function () {
+          return getExtensionsList(root).then(function (res) {
+            if (!res.ok || !res.list || !res.list.length) return;
+            var enabledSet = {};
+            res.list.forEach(function (item) {
+              if (item.enabled) enabledSet[item.id] = true;
+            });
+            var extDir = root.replace(/\\/g, '/') + '/' + ALEXIDE_EXT_DIR.replace(/\//g, '/');
+            return loadOneExtensionDir(extDir, enabledSet);
+          });
+        }).catch(function () {});
+      }
+      return chain;
+    }
+
+    function getViewerForExt(ext) {
+      var lower = (ext || '').toLowerCase();
+      var dot = lower ? '.' + lower : '';
+      for (var i = 0; i < fileViewers.length; i++) {
+        var v = fileViewers[i];
+        if (v.extensions.indexOf(dot) !== -1) return v;
+      }
+      return null;
+    }
+
+    var diagnosticsTimeout = null;
+    function refreshDiagnostics(filePath, model) {
+      if (!model || !window.monaco) return;
+      var lang = model.getLanguageId && model.getLanguageId();
+      var provider = diagnosticProviders[lang] || diagnosticProviders['javascript'];
+      if (!provider || typeof provider !== 'function') {
+        window.monaco.editor.setModelMarkers(model, 'extension', []);
+        return;
+      }
+      var content = model.getValue();
+      Promise.resolve(provider(filePath, content)).then(function (errors) {
+        if (!errors || !errors.length) {
+          window.monaco.editor.setModelMarkers(model, 'extension', []);
+          return;
+        }
+        var markers = errors.map(function (e) {
+          var line = Math.max(1, parseInt(e.line, 10) || 1);
+          var column = Math.max(1, parseInt(e.column, 10) || 1);
+          return {
+            startLineNumber: line,
+            startColumn: column,
+            endLineNumber: line,
+            endColumn: column + 1,
+            message: e.message || 'Error',
+            severity: (e.severity === 'warning') ? window.monaco.MarkerSeverity.Warning : window.monaco.MarkerSeverity.Error,
+          };
+        });
+        window.monaco.editor.setModelMarkers(model, 'extension', markers);
+      }).catch(function () {
+        window.monaco.editor.setModelMarkers(model, 'extension', []);
+      });
+    }
+
     function createEditor() {
       if (editor) return editor;
       editor = window.monaco.editor.create(monacoRoot, {
@@ -137,7 +268,13 @@
         const path = activeFilePath;
         if (path && openTabs.has(path)) {
           const tab = openTabs.get(path);
-          if (!tab.isDiff) { tab.dirty = true; updateTabLabel(path); }
+          if (!tab.isDiff && !tab.isCustomView) { tab.dirty = true; updateTabLabel(path); }
+        }
+        if (path && editor.getModel()) {
+          clearTimeout(diagnosticsTimeout);
+          diagnosticsTimeout = setTimeout(function () {
+            refreshDiagnostics(path, editor.getModel());
+          }, 400);
         }
       });
       return editor;
@@ -480,6 +617,14 @@
       });
       syncExplorerToFile(tab.filePath);
       if (sidebarPanelGit.style.display !== 'none') refreshFileHistory();
+      if (editorToolbar) {
+        editorToolbar.style.display = 'none';
+        editorToolbar.setAttribute('aria-hidden', 'true');
+      }
+      if (extensionViewRoot) {
+        extensionViewRoot.style.display = 'none';
+        extensionViewRoot.setAttribute('aria-hidden', 'true');
+      }
       if (tab.isDiff) {
         if (editorContainer) editorContainer.classList.remove('editor-empty');
         if (monacoRoot) monacoRoot.style.display = 'none';
@@ -488,12 +633,59 @@
           diffViewContent.innerHTML = tab.diffChunks ? renderDiffHtml(tab.diffChunks) : '<div class="diff-loading">Computing diff…</div>';
         }
         statusPosition.textContent = 'Ln 1, Col 1';
+      } else if (tab.isCustomView) {
+        if (editorContainer) editorContainer.classList.remove('editor-empty');
+        if (monacoRoot) monacoRoot.style.display = 'none';
+        if (monacoDiffRoot) monacoDiffRoot.setAttribute('aria-hidden', 'true');
+        if (editorToolbar) {
+          editorToolbar.style.display = 'flex';
+          editorToolbar.setAttribute('aria-hidden', 'false');
+          editorToolbarPreview.setAttribute('aria-pressed', tab.viewMode === 'preview' ? 'true' : 'false');
+          editorToolbarCode.setAttribute('aria-pressed', tab.viewMode === 'code' ? 'true' : 'false');
+        }
+        if (tab.viewMode === 'preview') {
+          if (extensionViewRoot) {
+            extensionViewRoot.style.display = 'block';
+            extensionViewRoot.setAttribute('aria-hidden', 'false');
+            extensionViewRoot.innerHTML = '';
+            var showCode = function () {
+              tab.viewMode = 'code';
+              switchToTab(filePathOrKey);
+            };
+            try {
+              tab.viewer.render(tab.filePath, extensionViewRoot, showCode);
+            } catch (e) {
+              extensionViewRoot.innerHTML = '<div class="extension-error">Preview failed: ' + escapeHtml(String(e.message || e)) + '</div>';
+            }
+          }
+          statusPosition.textContent = 'Ln 1, Col 1';
+        } else {
+          if (extensionViewRoot) extensionViewRoot.style.display = 'none';
+          createEditor();
+          if (monacoRoot) monacoRoot.style.display = '';
+          function setCodeModel() {
+            if (tab.model) {
+              editor.setModel(tab.model);
+              var pos = editor.getPosition();
+              if (pos) statusPosition.textContent = 'Ln ' + pos.lineNumber + ', Col ' + pos.column;
+              return;
+            }
+            readFile(tab.filePath).then(function (res) {
+              var content = (res.ok && res.content) ? res.content : '(Preview-only file. Use Preview to view.)';
+              tab.model = window.monaco.editor.createModel(content, 'plaintext', window.monaco.Uri.file(tab.filePath));
+              editor.setModel(tab.model);
+              statusPosition.textContent = 'Ln 1, Col 1';
+            });
+          }
+          setCodeModel();
+        }
       } else {
         if (editorContainer) editorContainer.classList.remove('editor-empty');
         createEditor();
         if (monacoRoot) monacoRoot.style.display = '';
         if (monacoDiffRoot) monacoDiffRoot.setAttribute('aria-hidden', 'true');
         editor.setModel(tab.model);
+        refreshDiagnostics(filePathOrKey, tab.model);
         const pos = editor.getPosition();
         if (pos) statusPosition.textContent = 'Ln ' + pos.lineNumber + ', Col ' + pos.column;
       }
@@ -520,7 +712,8 @@
           statusPosition.textContent = 'Ln 1, Col 1';
         }
       }
-      if (!tab.isDiff) tab.model.dispose();
+      if (!tab.isDiff && !tab.isCustomView && tab.model) tab.model.dispose();
+      if (tab.isCustomView && tab.model) tab.model.dispose();
       if (tab.el && tab.el.parentNode) tab.el.parentNode.removeChild(tab.el);
       openTabs.delete(filePathOrKey);
     }
@@ -556,7 +749,66 @@
       });
     }
 
+    function addCustomViewTab(filePath, name, viewer) {
+      if (openTabs.has(filePath)) {
+        switchToTab(filePath);
+        return;
+      }
+      var tab = {
+        filePath: filePath,
+        name: name || filePath.split(/[/\\]/).pop(),
+        isCustomView: true,
+        viewer: viewer,
+        viewMode: 'preview',
+        model: null,
+        dirty: false,
+        el: null,
+      };
+      openTabs.set(filePath, tab);
+      tabOrder.push(filePath);
+      var tabEl = document.createElement('div');
+      tabEl.className = 'tab';
+      tabEl.dataset.path = filePath;
+      tabEl.draggable = true;
+      tabEl.innerHTML = '<span class="label">' + escapeHtml(tab.name) + '</span><button type="button" class="close" aria-label="Close"><span class="close-dot">•</span><span class="close-x">×</span></button>';
+      tab.el = tabEl;
+      tabsEl.appendChild(tabEl);
+      tabEl.querySelector('.close').addEventListener('click', function (e) {
+        e.stopPropagation();
+        closeTabWithConfirm(filePath);
+      });
+      tabEl.addEventListener('click', function (e) {
+        if (e.detail === 2) { tab.temp = false; if (tab.el) tab.el.classList.remove('temp'); }
+        else { switchToTab(filePath); }
+      });
+      tabEl.addEventListener('dragstart', function (e) {
+        e.dataTransfer.setData('text/plain', filePath);
+        e.dataTransfer.effectAllowed = 'move';
+        tabEl.classList.add('tab-dragging');
+      });
+      tabEl.addEventListener('dragend', function () { tabEl.classList.remove('tab-dragging'); });
+      tabEl.addEventListener('dragover', function (e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+      tabEl.addEventListener('drop', function (e) {
+        e.preventDefault();
+        var draggedKey = e.dataTransfer.getData('text/plain');
+        if (!draggedKey || draggedKey === filePath) return;
+        var fromIdx = tabOrder.indexOf(draggedKey);
+        var toIdx = tabOrder.indexOf(filePath);
+        if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+        tabOrder.splice(fromIdx, 1);
+        tabOrder.splice(fromIdx < toIdx ? toIdx - 1 : toIdx, 0, draggedKey);
+        syncTabsDOM();
+      });
+      switchToTab(filePath);
+    }
+
     function openFile(filePath, name, options) {
+      var ext = getExtension(filePath);
+      var viewer = getViewerForExt(ext);
+      if (viewer) {
+        addCustomViewTab(filePath, name || filePath.split(/[/\\]/).pop(), viewer);
+        return;
+      }
       readFile(filePath).then(function (res) {
         if (res.ok) addTab(filePath, res.content, name, options);
         else {}
@@ -758,6 +1010,7 @@
         folderPlaceholder.style.display = 'none';
         fileTreeEl.style.display = 'block';
         fileTreeEl.innerHTML = '';
+        loadExtensions(projectRoot);
         listDir(folderPath).then(function (r) {
           if (r.ok) renderTree(r.entries, folderPath, fileTreeEl, 0);
           else {}
@@ -769,6 +1022,21 @@
 
     document.getElementById('open-folder-sidebar').addEventListener('click', openFolderClicked);
     if (window.alexide.onMenuOpenFolder) window.alexide.onMenuOpenFolder(openFolderClicked);
+
+    if (editorToolbarPreview) editorToolbarPreview.addEventListener('click', function () {
+      if (!activeFilePath) return;
+      var tab = openTabs.get(activeFilePath);
+      if (!tab || !tab.isCustomView) return;
+      tab.viewMode = 'preview';
+      switchToTab(activeFilePath);
+    });
+    if (editorToolbarCode) editorToolbarCode.addEventListener('click', function () {
+      if (!activeFilePath) return;
+      var tab = openTabs.get(activeFilePath);
+      if (!tab || !tab.isCustomView) return;
+      tab.viewMode = 'code';
+      switchToTab(activeFilePath);
+    });
 
     function getParentPath(p) {
       const normalized = (p || '').replace(/\\/g, '/');
@@ -981,19 +1249,67 @@
       };
     });
 
+    function refreshExtensionsPanel() {
+      if (!extensionsListContainer || !extensionsList || !extensionsPlaceholder) return;
+      if (!projectRoot) {
+        extensionsPlaceholder.style.display = '';
+        extensionsListContainer.style.display = 'none';
+        return;
+      }
+      getExtensionsList(projectRoot).then(function (res) {
+        if (!res.ok || !res.list || !res.list.length) {
+          extensionsPlaceholder.style.display = '';
+          extensionsPlaceholder.querySelector('p').textContent = 'No extensions in .alexide/extensions';
+          extensionsListContainer.style.display = 'none';
+          return;
+        }
+        extensionsPlaceholder.style.display = 'none';
+        extensionsListContainer.style.display = 'flex';
+        extensionsList.innerHTML = '';
+        res.list.forEach(function (item) {
+          var row = document.createElement('div');
+          row.className = 'extension-row';
+          row.innerHTML =
+            '<div class="extension-row-info">' +
+              '<div class="extension-row-name">' + escapeHtml(item.name || item.id) + '</div>' +
+              (item.description ? '<div class="extension-row-desc">' + escapeHtml(item.description) + '</div>' : '') +
+            '</div>' +
+            '<button type="button" class="extension-row-toggle' + (item.enabled ? ' enabled' : '') + '" data-extension-id="' + escapeHtml(item.id) + '" aria-label="' + (item.enabled ? 'Disable' : 'Enable') + ' ' + escapeHtml(item.name || item.id) + '" title="' + (item.enabled ? 'Disable' : 'Enable') + '"></button>';
+          var btn = row.querySelector('.extension-row-toggle');
+          btn.addEventListener('click', function () {
+            var id = btn.dataset.extensionId;
+            var nextEnabled = !btn.classList.contains('enabled');
+            setExtensionEnabled(projectRoot, id, nextEnabled).then(function () {
+              loadExtensions(projectRoot);
+              refreshExtensionsPanel();
+            });
+          });
+          extensionsList.appendChild(row);
+        });
+      });
+    }
+
     function switchSidebarTab(panel) {
       const isExplorer = panel === 'explorer';
       const isGit = panel === 'git';
       const isSearch = panel === 'search';
+      const isExtensions = panel === 'extensions';
       document.getElementById('sidebar-tab-explorer').classList.toggle('open', isExplorer);
       document.getElementById('sidebar-tab-explorer').setAttribute('aria-pressed', isExplorer ? 'true' : 'false');
       document.getElementById('sidebar-tab-git').classList.toggle('open', isGit);
       document.getElementById('sidebar-tab-git').setAttribute('aria-pressed', isGit ? 'true' : 'false');
       document.getElementById('sidebar-tab-search').classList.toggle('open', isSearch);
       document.getElementById('sidebar-tab-search').setAttribute('aria-pressed', isSearch ? 'true' : 'false');
+      var tabExt = document.getElementById('sidebar-tab-extensions');
+      if (tabExt) {
+        tabExt.classList.toggle('open', isExtensions);
+        tabExt.setAttribute('aria-pressed', isExtensions ? 'true' : 'false');
+      }
       sidebarPanelExplorer.style.display = isExplorer ? '' : 'none';
       sidebarPanelGit.style.display = isGit ? '' : 'none';
       sidebarPanelSearch.style.display = isSearch ? '' : 'none';
+      var panelExt = document.getElementById('sidebar-panel-extensions');
+      if (panelExt) panelExt.style.display = isExtensions ? '' : 'none';
       if (isGit) refreshGitPanel();
       if (isSearch) {
         if (projectRoot) {
@@ -1006,10 +1322,13 @@
           searchPanelContent.style.display = 'none';
         }
       }
+      if (isExtensions) refreshExtensionsPanel();
     }
     document.getElementById('sidebar-tab-explorer').addEventListener('click', function () { switchSidebarTab('explorer'); });
     document.getElementById('sidebar-tab-git').addEventListener('click', function () { switchSidebarTab('git'); });
     document.getElementById('sidebar-tab-search').addEventListener('click', function () { switchSidebarTab('search'); });
+    var tabExtEl = document.getElementById('sidebar-tab-extensions');
+    if (tabExtEl) tabExtEl.addEventListener('click', function () { switchSidebarTab('extensions'); });
 
     function getAllFiles(dir) {
       return listDir(dir).then(function (r) {

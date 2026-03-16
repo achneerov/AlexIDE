@@ -7,6 +7,7 @@ const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
 const diff = require('diff');
+const acorn = require('acorn');
 
 const iconPath = path.join(__dirname, 'assets', 'icon.png');
 
@@ -283,38 +284,30 @@ app.on('activate', () => {
 
 // File system APIs for project explorer
 ipcMain.handle('open-folder', async () => {
-  console.log('[AlexIDE] open-folder: renderer requested dialog');
   const result = await dialog.showOpenDialog(null, {
     properties: ['openDirectory'],
     title: 'Open Folder',
   });
-  console.log('[AlexIDE] open-folder: dialog closed', {
-    canceled: result.canceled,
-    filePaths: result.filePaths,
-  });
-  const out = result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
-  console.log('[AlexIDE] open-folder: returning', out);
-  return out;
+  return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
 });
 
 ipcMain.handle('list-dir', async (_event, dirPath) => {
-  console.log('[AlexIDE] list-dir:', dirPath);
+  if (!dirPath || typeof dirPath !== 'string') return { ok: false, error: 'Missing path' };
   try {
-    const names = await fs.readdir(dirPath, { withFileTypes: true });
+    const resolvedDir = path.resolve(dirPath);
+    const names = await fs.readdir(resolvedDir, { withFileTypes: true });
     const entries = names
       .map((d) => ({
         name: d.name,
-        path: path.join(dirPath, d.name),
+        path: path.join(resolvedDir, d.name),
         isDirectory: d.isDirectory(),
       }))
       .sort((a, b) => {
         if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
         return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
       });
-    console.log('[AlexIDE] list-dir: ok, entries=', entries.length);
     return { ok: true, entries };
   } catch (err) {
-    console.log('[AlexIDE] list-dir: error', err.message);
     return { ok: false, error: err.message };
   }
 });
@@ -371,12 +364,144 @@ ipcMain.handle('read-file', async (_event, filePath) => {
   }
 });
 
+ipcMain.handle('get-file-url', (_event, filePath) => {
+  if (!filePath || typeof filePath !== 'string') return null;
+  try {
+    return pathToFileURL(path.resolve(filePath)).href;
+  } catch (_) {
+    return null;
+  }
+});
+
+ipcMain.handle('get-monaco-base-url', () => {
+  try {
+    const monacoMin = path.join(__dirname, 'node_modules', 'monaco-editor', 'min');
+    let href = pathToFileURL(monacoMin).href;
+    if (!href.endsWith('/')) href += '/';
+    return href;
+  } catch (_) {
+    return null;
+  }
+});
+
+ipcMain.handle('get-app-path', () => __dirname);
+
+const IMAGE_MIME = {
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+  '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+  '.ico': 'image/x-icon', '.svg': 'image/svg+xml',
+};
+ipcMain.handle('get-file-data-url', async (_event, filePath, mimeHint) => {
+  if (!filePath || typeof filePath !== 'string') return null;
+  try {
+    const buf = await fs.readFile(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const mime = mimeHint || IMAGE_MIME[ext] || 'application/octet-stream';
+    return 'data:' + mime + ';base64,' + buf.toString('base64');
+  } catch (_) {
+    return null;
+  }
+});
+
+ipcMain.handle('get-file-array-buffer', async (_event, filePath) => {
+  if (!filePath || typeof filePath !== 'string') return null;
+  try {
+    return await fs.readFile(filePath);
+  } catch (_) {
+    return null;
+  }
+});
+
+ipcMain.handle('parse-javascript', (_event, content) => {
+  if (typeof content !== 'string') return { ok: true, errors: [] };
+  try {
+    acorn.parse(content, { ecmaVersion: 2020, locations: true });
+    return { ok: true, errors: [] };
+  } catch (err) {
+    const loc = err.loc || {};
+    return {
+      ok: false,
+      errors: [{ line: loc.line || 1, column: loc.column || 0, message: err.message || 'Syntax error' }],
+    };
+  }
+});
+
 ipcMain.handle('write-file', async (_event, filePath, content) => {
   try {
     await fs.writeFile(filePath, content, 'utf-8');
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
+  }
+});
+
+const EXTENSIONS_STATE_FILE = '.alexide/extensions-state.json';
+
+ipcMain.handle('get-extensions-state', async (_event, projectRoot) => {
+  if (!projectRoot || typeof projectRoot !== 'string') return {};
+  try {
+    const statePath = path.join(projectRoot, EXTENSIONS_STATE_FILE);
+    const content = await fs.readFile(statePath, 'utf-8');
+    const data = JSON.parse(content);
+    return typeof data === 'object' && data !== null ? data : {};
+  } catch (_) {
+    return {};
+  }
+});
+
+ipcMain.handle('set-extension-enabled', async (_event, projectRoot, extensionId, enabled) => {
+  if (!projectRoot || typeof projectRoot !== 'string' || !extensionId) return { ok: false };
+  try {
+    const dir = path.join(projectRoot, '.alexide');
+    const statePath = path.join(projectRoot, EXTENSIONS_STATE_FILE);
+    let state = {};
+    try {
+      const content = await fs.readFile(statePath, 'utf-8');
+      state = JSON.parse(content);
+      if (typeof state !== 'object' || state === null) state = {};
+    } catch (_) {}
+    state[extensionId] = !!enabled;
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(statePath, JSON.stringify(state, null, 2), 'utf-8');
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('get-extensions-list', async (_event, projectRoot) => {
+  if (!projectRoot || typeof projectRoot !== 'string') return { ok: false, list: [] };
+  try {
+    const extDir = path.join(projectRoot, '.alexide', 'extensions');
+    const entries = await fs.readdir(extDir, { withFileTypes: true });
+    let state = {};
+    try {
+      const statePath = path.join(projectRoot, EXTENSIONS_STATE_FILE);
+      const content = await fs.readFile(statePath, 'utf-8');
+      state = JSON.parse(content);
+      if (typeof state !== 'object' || state === null) state = {};
+    } catch (_) {}
+    const list = [];
+    for (const ent of entries) {
+      if (!ent.isDirectory()) continue;
+      const id = ent.name;
+      let name = id;
+      let description = '';
+      let defaultEnabled = true;
+      try {
+        const manifestPath = path.join(extDir, id, 'extension.json');
+        const content = await fs.readFile(manifestPath, 'utf-8');
+        const manifest = JSON.parse(content);
+        if (manifest.name) name = manifest.name;
+        if (manifest.description) description = manifest.description;
+        if (manifest.enabled === false) defaultEnabled = false;
+      } catch (_) {}
+      const enabled = state.hasOwnProperty(id) ? state[id] : defaultEnabled;
+      list.push({ id, name, description, enabled });
+    }
+    return { ok: true, list };
+  } catch (_) {
+    return { ok: true, list: [] };
   }
 });
 

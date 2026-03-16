@@ -15,6 +15,8 @@ ipcRenderer.on('explorer-context-action', (_event, payload) => {
 
 contextBridge.exposeInMainWorld('alexide', {
   platform: process.platform,
+  getMonacoBaseUrl: () => ipcRenderer.invoke('get-monaco-base-url'),
+  getAppPath: () => ipcRenderer.invoke('get-app-path'),
   getIconDataUrl: () => ipcRenderer.invoke('get-icon-data-url'),
   openFolder: () => ipcRenderer.invoke('open-folder'),
   onMenuOpenFolder: (fn) => { onMenuOpenFolder = fn; },
@@ -26,7 +28,14 @@ contextBridge.exposeInMainWorld('alexide', {
   copyToClipboard: (text) => ipcRenderer.invoke('copy-to-clipboard', text),
   showUnsavedCloseDialog: (fileName) => ipcRenderer.invoke('show-unsaved-close-dialog', fileName),
   listDir: (dirPath) => ipcRenderer.invoke('list-dir', dirPath),
+  getExtensionsState: (projectRoot) => ipcRenderer.invoke('get-extensions-state', projectRoot),
+  setExtensionEnabled: (projectRoot, extensionId, enabled) => ipcRenderer.invoke('set-extension-enabled', projectRoot, extensionId, enabled),
+  getExtensionsList: (projectRoot) => ipcRenderer.invoke('get-extensions-list', projectRoot),
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
+  getFileUrl: (filePath) => ipcRenderer.invoke('get-file-url', filePath),
+  getFileDataUrl: (filePath, mimeHint) => ipcRenderer.invoke('get-file-data-url', filePath, mimeHint),
+  getFileArrayBuffer: (filePath) => ipcRenderer.invoke('get-file-array-buffer', filePath),
+  parseJavaScript: (content) => ipcRenderer.invoke('parse-javascript', content),
   writeFile: (filePath, content) => ipcRenderer.invoke('write-file', filePath, content),
   deleteFile: (cwd, filePath) => ipcRenderer.invoke('delete-file', cwd, filePath),
   createFile: (parentDir, name) => ipcRenderer.invoke('create-file', parentDir, name),

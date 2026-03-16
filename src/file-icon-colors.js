@@ -32,12 +32,20 @@ window.FILE_ICON_COLORS = {
   less: '#1d365d',
   styl: '#ff6347',
 
-  // Docs / markup
+  // Docs / markup / media
   md: '#083fa1',
   markdown: '#083fa1',
   mdx: '#083fa1',
   rst: '#366a9a',
   txt: '#8c8c8c',
+  pdf: '#e74c3c',
+  jpg: '#0066cc',
+  jpeg: '#0066cc',
+  png: '#0066cc',
+  gif: '#0066cc',
+  webp: '#0066cc',
+  bmp: '#0066cc',
+  ico: '#0066cc',
 
   // Python
   py: '#3572a5',

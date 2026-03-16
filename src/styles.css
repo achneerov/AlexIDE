@@ -388,6 +388,76 @@ html, body {
 }
 
 /* Search panel */
+.extensions-list-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 10px 12px;
+}
+.extensions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.extension-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+.extension-row-info {
+  min-width: 0;
+  flex: 1;
+}
+.extension-row-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-sidebar);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.extension-row-desc {
+  font-size: 11px;
+  color: #858585;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.extension-row-toggle {
+  flex-shrink: 0;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--border);
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s;
+}
+.extension-row-toggle.enabled {
+  background: var(--accent);
+}
+.extension-row-toggle::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.15s;
+}
+.extension-row-toggle.enabled::after {
+  transform: translateX(16px);
+}
+
 .search-panel-content {
   display: flex;
   flex-direction: column;
@@ -940,6 +1010,34 @@ html, body {
   flex-shrink: 0;
 }
 
+.editor-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--bg-tab-inactive);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.editor-toolbar-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-sidebar);
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.editor-toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.editor-toolbar-btn[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
 .tab {
   display: flex;
   align-items: center;
@@ -1064,6 +1162,26 @@ html, body {
   left: 0;
   right: 0;
   bottom: 0;
+}
+
+.extension-view-root {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: auto;
+  background: var(--bg-editor);
+}
+.extension-view-root img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+.extension-error {
+  padding: 12px;
+  color: #c00;
+  font-size: 13px;
 }
 
 .monaco-diff-container {

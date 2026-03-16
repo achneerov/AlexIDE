@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; worker-src 'self' blob: https://cdn.jsdelivr.net;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; worker-src 'self' blob: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;">
   <title>AlexIDE</title>
   <link rel="icon" href="" id="favicon" type="image/png">
   <link rel="stylesheet" href="styles.css">
@@ -18,6 +18,7 @@
             <button type="button" class="sidebar-tab open" id="sidebar-tab-explorer" aria-pressed="true">Folder</button>
             <button type="button" class="sidebar-tab" id="sidebar-tab-git" aria-pressed="false">Git</button>
             <button type="button" class="sidebar-tab" id="sidebar-tab-search" aria-pressed="false">Search</button>
+            <button type="button" class="sidebar-tab" id="sidebar-tab-extensions" aria-pressed="false">Extensions</button>
           </div>
         </div>
         <div class="sidebar-content">
@@ -88,11 +89,23 @@
               <div class="search-results" id="search-results"></div>
             </div>
           </div>
+          <div id="sidebar-panel-extensions" class="sidebar-panel" style="display: none;">
+            <div id="extensions-placeholder" class="placeholder">
+              <p>Open a folder to manage extensions.</p>
+            </div>
+            <div id="extensions-list-container" class="extensions-list-container" style="display: none;">
+              <div id="extensions-list" class="extensions-list"></div>
+            </div>
+          </div>
         </div>
       </aside>
       <div class="sidebar-resizer" id="sidebar-resizer" title="Drag to resize"></div>
       <main class="editor-area">
         <div class="tabs" id="tabs"></div>
+        <div id="editor-toolbar" class="editor-toolbar" style="display: none;" aria-hidden="true">
+          <button type="button" class="editor-toolbar-btn" id="editor-toolbar-preview" aria-pressed="true">Preview</button>
+          <button type="button" class="editor-toolbar-btn" id="editor-toolbar-code" aria-pressed="false">Code</button>
+        </div>
         <div class="editor-container editor-empty" id="editor-container">
           <div id="editor-empty-state" class="editor-empty-state" aria-hidden="false">
             <p class="editor-empty-state-text">Open a file from the sidebar to get started</p>
@@ -101,6 +114,7 @@
           <div id="monaco-diff-root" class="monaco-diff-container" aria-hidden="true">
             <div id="diff-view-content" class="diff-view-content"></div>
           </div>
+          <div id="extension-view-root" class="extension-view-root" aria-hidden="true" style="display: none;"></div>
         </div>
       </main>
     </div>
