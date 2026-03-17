@@ -1026,7 +1026,8 @@ html, body {
   flex-shrink: 0;
 }
 
-.editor-toolbar {
+.editor-toolbar,
+.editor-run-bar {
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -1035,6 +1036,9 @@ html, body {
   background: var(--bg-tab-inactive);
   border-bottom: 1px solid var(--border);
   font-size: 12px;
+}
+.editor-run-bar {
+  min-height: 32px;
 }
 .editor-toolbar-btn {
   padding: 4px 10px;

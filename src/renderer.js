@@ -96,8 +96,11 @@
     const editorToolbar = document.getElementById('editor-toolbar');
     const editorToolbarPreview = document.getElementById('editor-toolbar-preview');
     const editorToolbarCode = document.getElementById('editor-toolbar-code');
+    const editorRunBar = document.getElementById('editor-run-bar');
+    const editorToolbarRun = document.getElementById('editor-toolbar-run');
 
     var fileViewers = [];
+    var runHandlers = [];
     var diagnosticProviders = {};
     const ALEXIDE_EXT_DIR = '.alexide/extensions';
 
@@ -157,6 +160,10 @@
                       var exts = (opts && opts.extensions) || [];
                       fileViewers.push({ id: extensionId, extensions: exts, render: renderFn });
                     },
+                    registerRunHandler: function (opts, runFn) {
+                      var exts = (opts && opts.extensions) || [];
+                      runHandlers.push({ id: extensionId, extensions: exts, run: runFn });
+                    },
                   registerDiagnosticProvider: function (languageId, provideFn) {
                     diagnosticProviders[languageId] = provideFn;
                   },
@@ -179,6 +186,7 @@
 
     function loadExtensions(root) {
       fileViewers = [];
+      runHandlers = [];
       diagnosticProviders = {};
       var chain = Promise.resolve();
       if (root && getExtensionsList) {
@@ -224,6 +232,28 @@
         if (v.extensions.indexOf(dot) !== -1) return v;
       }
       return null;
+    }
+
+    function getRunHandlerForExt(ext) {
+      var lower = (ext || '').toLowerCase();
+      var dot = lower ? '.' + lower : '';
+      for (var i = 0; i < runHandlers.length; i++) {
+        var h = runHandlers[i];
+        if (h.extensions.indexOf(dot) !== -1) return h;
+      }
+      return null;
+    }
+
+    function runCommandInTerminal(cwd, command) {
+      var cwdNorm = (cwd || '').replace(/\\/g, '/');
+      var t = terminals.find(function (x) { return (x.cwd || '').replace(/\\/g, '/') === cwdNorm; });
+      if (t) {
+        terminalAPI.sendInput(t.id, command + '\n');
+        return;
+      }
+      terminalAPI.create(cwd).then(function (res) {
+        if (res.ok) terminalAPI.sendInput(res.terminalId, command + '\n');
+      });
     }
 
     var diagnosticsTimeout = null;
@@ -632,6 +662,10 @@
         editorToolbar.style.display = 'none';
         editorToolbar.setAttribute('aria-hidden', 'true');
       }
+      if (editorRunBar) {
+        editorRunBar.style.display = 'none';
+        editorRunBar.setAttribute('aria-hidden', 'true');
+      }
       if (extensionViewRoot) {
         extensionViewRoot.style.display = 'none';
         extensionViewRoot.setAttribute('aria-hidden', 'true');
@@ -704,6 +738,16 @@
         refreshDiagnostics(filePathOrKey, tab.model);
         const pos = editor.getPosition();
         if (pos) statusPosition.textContent = 'Ln ' + pos.lineNumber + ', Col ' + pos.column;
+        var runHandler = projectRoot ? getRunHandlerForExt(getExtension(tab.filePath)) : null;
+        if (editorRunBar) {
+          if (runHandler) {
+            editorRunBar.style.display = 'flex';
+            editorRunBar.setAttribute('aria-hidden', 'false');
+          } else {
+            editorRunBar.style.display = 'none';
+            editorRunBar.setAttribute('aria-hidden', 'true');
+          }
+        }
       }
     }
 
@@ -1130,6 +1174,23 @@
       if (!tab || !tab.isCustomView) return;
       tab.viewMode = 'code';
       switchToTab(activeFilePath);
+    });
+
+    if (editorToolbarRun) editorToolbarRun.addEventListener('click', function () {
+      if (!activeFilePath || !projectRoot) return;
+      var tab = openTabs.get(activeFilePath);
+      if (!tab || tab.isDiff || tab.isCustomView) return;
+      var handler = getRunHandlerForExt(getExtension(activeFilePath));
+      if (!handler || typeof handler.run !== 'function') return;
+      var context = {
+        projectRoot: projectRoot,
+        runCommand: function (command) { runCommandInTerminal(projectRoot, command); },
+      };
+      try {
+        handler.run(activeFilePath, context);
+      } catch (e) {
+        console.warn('Run handler failed:', e);
+      }
     });
 
     function getParentPath(p) {
@@ -2120,6 +2181,7 @@
 
         var termObj = {
           id: terminalId,
+          cwd: cwd || null,
           shellName: shellName,
           xterm: xterm,
           fitAddon: fitAddon,
