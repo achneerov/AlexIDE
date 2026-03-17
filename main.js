@@ -111,8 +111,9 @@ ipcMain.handle('terminal-create', async (event, cwd) => {
   const shell = process.platform === 'win32' ? process.env.COMSPEC || 'cmd.exe' : (process.env.SHELL || '/bin/sh');
   const shellName = getShellName(shell);
   const startCwd = (cwd && String(cwd).trim()) ? path.resolve(cwd) : process.cwd();
+  const shellArgs = process.platform === 'win32' ? [] : ['-l'];
   try {
-    const ptyProcess = pty.spawn(shell, [], {
+    const ptyProcess = pty.spawn(shell, shellArgs, {
       name: 'xterm-256color',
       cwd: startCwd,
       env: process.env,
