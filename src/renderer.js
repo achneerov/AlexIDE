@@ -135,7 +135,7 @@
         if (!list.ok || !list.entries) return [];
         var dirs = list.entries.filter(function (e) { return e.isDirectory; });
         return Promise.all(dirs.map(function (dir) {
-          if (enabledSet !== null && !enabledSet[dir.name]) return Promise.resolve();
+          if (enabledSet !== null && enabledSet[dir.name] === false) return Promise.resolve();
           var dirPath = extDir + '/' + dir.name;
           var manifestPath = dirPath + '/extension.json';
           return readFile(manifestPath).then(function (manifestRes) {
@@ -181,26 +181,37 @@
       fileViewers = [];
       diagnosticProviders = {};
       var chain = Promise.resolve();
-      if (window.alexide && typeof window.alexide.getAppPath === 'function') {
+      if (root && getExtensionsList) {
+        chain = chain.then(function () {
+          return getExtensionsList(root).then(function (res) {
+            var enabledSet = {};
+            if (res.ok && res.list && res.list.length) {
+              res.list.forEach(function (item) {
+                enabledSet[item.id] = !!item.enabled;
+              });
+            }
+            var next = Promise.resolve();
+            if (window.alexide && typeof window.alexide.getAppPath === 'function') {
+              next = next.then(function () {
+                return window.alexide.getAppPath().then(function (appPath) {
+                  var builtinDir = (appPath || '').replace(/\\/g, '/') + '/.alexide/extensions';
+                  return loadOneExtensionDir(builtinDir, enabledSet);
+                }).catch(function () {});
+              });
+            }
+            return next.then(function () {
+              var extDir = root.replace(/\\/g, '/') + '/' + ALEXIDE_EXT_DIR.replace(/\//g, '/');
+              return loadOneExtensionDir(extDir, enabledSet);
+            });
+          });
+        }).catch(function () {});
+      } else if (window.alexide && typeof window.alexide.getAppPath === 'function') {
         chain = chain.then(function () {
           return window.alexide.getAppPath().then(function (appPath) {
             var builtinDir = (appPath || '').replace(/\\/g, '/') + '/.alexide/extensions';
             return loadOneExtensionDir(builtinDir, null);
           }).catch(function () {});
         });
-      }
-      if (root && getExtensionsList) {
-        chain = chain.then(function () {
-          return getExtensionsList(root).then(function (res) {
-            if (!res.ok || !res.list || !res.list.length) return;
-            var enabledSet = {};
-            res.list.forEach(function (item) {
-              if (item.enabled) enabledSet[item.id] = true;
-            });
-            var extDir = root.replace(/\\/g, '/') + '/' + ALEXIDE_EXT_DIR.replace(/\//g, '/');
-            return loadOneExtensionDir(extDir, enabledSet);
-          });
-        }).catch(function () {});
       }
       return chain;
     }
@@ -648,14 +659,19 @@
             extensionViewRoot.style.display = 'block';
             extensionViewRoot.setAttribute('aria-hidden', 'false');
             extensionViewRoot.innerHTML = '';
-            var showCode = function () {
-              tab.viewMode = 'code';
-              switchToTab(filePathOrKey);
-            };
-            try {
-              tab.viewer.render(tab.filePath, extensionViewRoot, showCode);
-            } catch (e) {
-              extensionViewRoot.innerHTML = '<div class="extension-error">Preview failed: ' + escapeHtml(String(e.message || e)) + '</div>';
+            var viewer = getViewerForExt(getExtension(tab.filePath));
+            if (viewer) {
+              var showCode = function () {
+                tab.viewMode = 'code';
+                switchToTab(filePathOrKey);
+              };
+              try {
+                viewer.render(tab.filePath, extensionViewRoot, showCode);
+              } catch (e) {
+                extensionViewRoot.innerHTML = '<div class="extension-error">Preview failed: ' + escapeHtml(String(e.message || e)) + '</div>';
+              }
+            } else {
+              extensionViewRoot.innerHTML = '<div class="extension-error">Preview unavailable. Enable the extension in the Extensions panel.</div>';
             }
           }
           statusPosition.textContent = 'Ln 1, Col 1';
@@ -895,7 +911,7 @@
         row.addEventListener('dragover', function (e) {
           e.preventDefault();
           e.stopPropagation();
-          e.dataTransfer.dropEffect = 'move';
+          e.dataTransfer.dropEffect = (e.dataTransfer.files && e.dataTransfer.files.length) ? 'copy' : 'move';
           wrap.classList.add('tree-item-drop-target');
         });
         row.addEventListener('dragleave', function () {
@@ -905,6 +921,17 @@
           e.preventDefault();
           e.stopPropagation();
           wrap.classList.remove('tree-item-drop-target');
+          var files = e.dataTransfer.files;
+          if (files && files.length && window.alexide.copyExternalInto) {
+            var paths = [];
+            for (var i = 0; i < files.length; i++) if (files[i].path) paths.push(files[i].path);
+            if (paths.length) {
+              window.alexide.copyExternalInto(entry.path, paths).then(function (res) {
+                if (res && res.ok) refreshFileTree();
+              });
+            }
+            return;
+          }
           var draggedPath = e.dataTransfer.getData('text/plain');
           if (!draggedPath || draggedPath === entry.path) return;
           var dropNorm = normPath(entry.path);
@@ -1022,6 +1049,73 @@
 
     document.getElementById('open-folder-sidebar').addEventListener('click', openFolderClicked);
     if (window.alexide.onMenuOpenFolder) window.alexide.onMenuOpenFolder(openFolderClicked);
+
+    var sidebarContentEl = sidebarPanelExplorer && sidebarPanelExplorer.parentElement;
+    function hasFileDrag(e) {
+      if (!e.dataTransfer || !e.dataTransfer.types) return false;
+      for (var i = 0; i < e.dataTransfer.types.length; i++) if (e.dataTransfer.types[i] === 'Files') return true;
+      return false;
+    }
+    function isExplorerActive() {
+      return projectRoot && document.getElementById('sidebar-tab-explorer').classList.contains('open') && sidebarPanelExplorer.style.display !== 'none';
+    }
+    function handleExplorerDrop(e) {
+      sidebarPanelExplorer.classList.remove('explorer-drag-over');
+      if (!e.dataTransfer.files || !e.dataTransfer.files.length || e.target.closest('.tree-item.tree-item-dir') || !projectRoot || !window.alexide.copyExternalInto) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var paths = [];
+      for (var i = 0; i < e.dataTransfer.files.length; i++) {
+        var f = e.dataTransfer.files[i];
+        if (f.path) paths.push(f.path);
+      }
+      if (paths.length) window.alexide.copyExternalInto(projectRoot, paths).then(function (res) { if (res && res.ok) refreshFileTree(); });
+    }
+    if (sidebarContentEl) {
+      sidebarContentEl.addEventListener('dragenter', function (e) {
+        if (hasFileDrag(e) && isExplorerActive()) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+        }
+      }, true);
+      sidebarContentEl.addEventListener('dragover', function (e) {
+        if (hasFileDrag(e) && isExplorerActive()) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          sidebarPanelExplorer.classList.add('explorer-drag-over');
+        }
+      }, true);
+      sidebarContentEl.addEventListener('drop', function (e) {
+        if (e.dataTransfer.files && e.dataTransfer.files.length && isExplorerActive()) handleExplorerDrop(e);
+      }, true);
+    }
+    if (sidebarPanelExplorer) {
+      sidebarPanelExplorer.addEventListener('dragleave', function (e) {
+        if (!sidebarPanelExplorer.contains(e.relatedTarget)) sidebarPanelExplorer.classList.remove('explorer-drag-over');
+      });
+      sidebarPanelExplorer.addEventListener('dragover', function (e) {
+        if (hasFileDrag(e) && projectRoot) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          sidebarPanelExplorer.classList.add('explorer-drag-over');
+        }
+      });
+      sidebarPanelExplorer.addEventListener('drop', function (e) {
+        if (e.dataTransfer.files && e.dataTransfer.files.length && !e.target.closest('.tree-item.tree-item-dir') && projectRoot) handleExplorerDrop(e);
+      });
+    }
+    if (fileTreeEl) {
+      fileTreeEl.addEventListener('dragover', function (e) {
+        if (hasFileDrag(e) && projectRoot && !e.target.closest('.tree-item.tree-item-dir')) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          sidebarPanelExplorer.classList.add('explorer-drag-over');
+        }
+      });
+      fileTreeEl.addEventListener('drop', function (e) {
+        if (e.dataTransfer.files && e.dataTransfer.files.length && !e.target.closest('.tree-item.tree-item-dir') && projectRoot) handleExplorerDrop(e);
+      });
+    }
 
     if (editorToolbarPreview) editorToolbarPreview.addEventListener('click', function () {
       if (!activeFilePath) return;
@@ -1280,8 +1374,17 @@
             var id = btn.dataset.extensionId;
             var nextEnabled = !btn.classList.contains('enabled');
             setExtensionEnabled(projectRoot, id, nextEnabled).then(function () {
-              loadExtensions(projectRoot);
-              refreshExtensionsPanel();
+              loadExtensions(projectRoot).then(function () {
+                refreshExtensionsPanel();
+                if (activeFilePath) {
+                  var tab = openTabs.get(activeFilePath);
+                  if (tab && tab.model && editor && editor.getModel() === tab.model) {
+                    refreshDiagnostics(activeFilePath, tab.model);
+                  } else if (tab && tab.isCustomView && tab.viewMode === 'preview') {
+                    switchToTab(activeFilePath);
+                  }
+                }
+              });
             });
           });
           extensionsList.appendChild(row);
@@ -1596,6 +1699,7 @@
                 if (res.ok) {
                   const fullPath = (projectRoot.replace(/\\/g, '/') + '/' + p.replace(/\\/g, '/')).replace(/\/+/g, '/');
                   if (openTabs.has(fullPath)) closeTab(fullPath);
+                  refreshFileTree();
                   refreshGitPanel();
                 } else {}
               });
@@ -1608,6 +1712,7 @@
                       if (r.ok) openTabs.get(fullPath).model.setValue(r.content);
                     });
                   }
+                  refreshFileTree();
                   refreshGitPanel();
                 } else {}
               });
@@ -1748,7 +1853,10 @@
             });
           });
         });
-        return chain.then(function () { refreshGitPanel(); });
+        return chain.then(function () {
+          refreshFileTree();
+          refreshGitPanel();
+        });
       });
     });
 

@@ -435,6 +435,46 @@ ipcMain.handle('write-file', async (_event, filePath, content) => {
   }
 });
 
+async function copyPathIntoDir(srcPath, targetDir) {
+  const stat = await fs.stat(srcPath);
+  const base = path.basename(srcPath);
+  const dest = path.join(targetDir, base);
+  if (stat.isDirectory()) {
+    await fs.mkdir(dest, { recursive: true });
+    const entries = await fs.readdir(srcPath, { withFileTypes: true });
+    for (const ent of entries) {
+      await copyPathIntoDir(path.join(srcPath, ent.name), dest);
+    }
+  } else {
+    await fs.copyFile(srcPath, dest);
+  }
+}
+
+ipcMain.handle('copy-external-into', async (_event, targetDir, sourcePaths) => {
+  if (!targetDir || typeof targetDir !== 'string' || !Array.isArray(sourcePaths) || sourcePaths.length === 0) {
+    return { ok: false, error: 'Invalid arguments' };
+  }
+  try {
+    const resolvedTarget = path.resolve(targetDir);
+    await fs.mkdir(resolvedTarget, { recursive: true });
+    const sep = path.sep;
+    for (const src of sourcePaths) {
+      if (!src || typeof src !== 'string') continue;
+      const resolvedSrc = path.resolve(src);
+      if (resolvedSrc === resolvedTarget) continue;
+      if (resolvedTarget.startsWith(resolvedSrc + sep)) continue;
+      try {
+        await copyPathIntoDir(resolvedSrc, resolvedTarget);
+      } catch (err) {
+        return { ok: false, error: err.message };
+      }
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
 const EXTENSIONS_STATE_FILE = '.alexide/extensions-state.json';
 
 ipcMain.handle('get-extensions-state', async (_event, projectRoot) => {

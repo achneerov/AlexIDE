@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('alexide', {
   createFolder: (parentDir, name) => ipcRenderer.invoke('create-folder', parentDir, name),
   renamePath: (oldPath, newPath) => ipcRenderer.invoke('rename-path', oldPath, newPath),
   deletePath: (targetPath) => ipcRenderer.invoke('delete-path', targetPath),
+  copyExternalInto: (targetDir, sourcePaths) => ipcRenderer.invoke('copy-external-into', targetDir, sourcePaths),
   terminal: {
     create: (cwd) => ipcRenderer.invoke('terminal-create', cwd || null),
     kill: (terminalId) => ipcRenderer.invoke('terminal-kill', terminalId),
