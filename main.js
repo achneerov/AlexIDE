@@ -270,7 +270,7 @@ function buildAppMenu() {
 }
 
 app.whenReady().then(() => {
-  if (app.dock) app.dock.setIcon(nativeImage.createFromPath(iconPath));
+  if (app.dock && !app.isPackaged) app.dock.setIcon(nativeImage.createFromPath(iconPath));
   buildAppMenu();
   createWindow();
 });
