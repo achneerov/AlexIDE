@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld('alexide', {
   getAppPath: () => ipcRenderer.invoke('get-app-path'),
   getIconDataUrl: () => ipcRenderer.invoke('get-icon-data-url'),
   openFolder: () => ipcRenderer.invoke('open-folder'),
+  startWatchDir: (dirPath) => ipcRenderer.invoke('start-watch-dir', dirPath),
+  onDirChanged: (fn) => ipcRenderer.on('dir-changed', () => { if (typeof fn === 'function') fn(); }),
   onMenuOpenFolder: (fn) => { onMenuOpenFolder = fn; },
   onMenuToggleTerminal: (fn) => { onMenuToggleTerminal = fn; },
   onExplorerContextAction: (fn) => { onExplorerContextAction = fn; },

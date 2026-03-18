@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, nativeImage, shell, clipboard
 const path = require('path');
 const { pathToFileURL } = require('url');
 const fs = require('fs').promises;
+const fsNative = require('fs');
 const pty = require('node-pty');
 const { exec } = require('child_process');
 const { promisify } = require('util');
@@ -284,12 +285,45 @@ app.on('activate', () => {
 });
 
 // File system APIs for project explorer
+let dirWatcher = null;
+let dirWatcherDebounce = null;
+let dirWatcherWebContents = null;
+const DIR_WATCH_DEBOUNCE_MS = 300;
+
 ipcMain.handle('open-folder', async () => {
   const result = await dialog.showOpenDialog(null, {
     properties: ['openDirectory'],
     title: 'Open Folder',
   });
   return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
+});
+
+ipcMain.handle('start-watch-dir', (event, dirPath) => {
+  if (dirWatcherDebounce) {
+    clearTimeout(dirWatcherDebounce);
+    dirWatcherDebounce = null;
+  }
+  if (dirWatcher) {
+    dirWatcher.close();
+    dirWatcher = null;
+  }
+  dirWatcherWebContents = null;
+  if (!dirPath || typeof dirPath !== 'string') return;
+  const resolvedDir = path.resolve(dirPath);
+  try {
+    dirWatcher = fsNative.watch(resolvedDir, { recursive: true }, (eventType, filename) => {
+      if (dirWatcherDebounce) clearTimeout(dirWatcherDebounce);
+      dirWatcherDebounce = setTimeout(() => {
+        dirWatcherDebounce = null;
+        if (dirWatcherWebContents && !dirWatcherWebContents.isDestroyed()) {
+          dirWatcherWebContents.send('dir-changed');
+        }
+      }, DIR_WATCH_DEBOUNCE_MS);
+    });
+    dirWatcherWebContents = event.sender;
+  } catch (err) {
+    // ignore if we can't watch (e.g. permission, path doesn't exist)
+  }
 });
 
 ipcMain.handle('list-dir', async (_event, dirPath) => {

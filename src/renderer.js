@@ -34,7 +34,7 @@
   initMonacoAndApp();
 
   function initApp() {
-    const { openFolder, listDir, readFile, writeFile, getExtensionsList, setExtensionEnabled, createFile: createFileAPI, createFolder: createFolderAPI, renamePath: renamePathAPI, deletePath: deletePathAPI, terminal: terminalAPI, git: gitAPI } = window.alexide;
+    const { openFolder, listDir, readFile, writeFile, getExtensionsList, setExtensionEnabled, createFile: createFileAPI, createFolder: createFolderAPI, renamePath: renamePathAPI, deletePath: deletePathAPI, terminal: terminalAPI, git: gitAPI, startWatchDir, onDirChanged } = window.alexide;
     let projectRoot = null;
     let editor = null;
     const openTabs = new Map();
@@ -1074,6 +1074,10 @@
       });
     }
 
+    onDirChanged(function () {
+      if (projectRoot && typeof refreshFileTree === 'function') refreshFileTree();
+    });
+
     function openFolderClicked() {
       openFolder().then(function (folderPath) {
         if (!folderPath) return;
@@ -1082,6 +1086,7 @@
         fileTreeEl.style.display = 'block';
         fileTreeEl.innerHTML = '';
         loadExtensions(projectRoot);
+        startWatchDir(folderPath);
         listDir(folderPath).then(function (r) {
           if (r.ok) renderTree(r.entries, folderPath, fileTreeEl, 0);
           else {}

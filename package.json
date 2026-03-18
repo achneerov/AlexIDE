@@ -1,6 +1,6 @@
 {
   "name": "alexide",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "An IDE built with Electron and Monaco",
   "main": "main.js",
   "scripts": {
