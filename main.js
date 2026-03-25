@@ -7,7 +7,6 @@ const pty = require('node-pty');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
-const diff = require('diff');
 const acorn = require('acorn');
 
 const iconPath = path.join(__dirname, 'assets', 'icon.png');
@@ -832,15 +831,6 @@ ipcMain.handle('git-file-history', async (_event, cwd, filePath) => {
   } catch (err) {
     return { ok: false, error: err.message, commits: [] };
   }
-});
-
-ipcMain.handle('compute-diff', (_event, oldText, newText) => {
-  const chunks = diff.diffLines(oldText || '', newText || '');
-  return chunks.map((c) => ({
-    added: Boolean(c.added),
-    removed: Boolean(c.removed),
-    value: c.value == null ? '' : String(c.value),
-  }));
 });
 
 ipcMain.handle('delete-file', async (_event, cwd, filePath) => {

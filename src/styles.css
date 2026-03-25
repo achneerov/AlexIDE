@@ -1215,60 +1215,9 @@ html, body {
   display: none;
 }
 
-.diff-view-content {
+.monaco-diff-mount {
   position: absolute;
   inset: 0;
-  overflow: auto;
-  padding: 12px 16px;
-  font-family: SF Mono, Monaco, Cascadia Code, Source Code Pro, Menlo, Consolas, monospace;
-  font-size: 13px;
-  line-height: 1.5;
-  background: var(--bg-sidebar);
-  color: var(--fg-sidebar);
-  white-space: pre;
-}
-.diff-loading,
-.diff-empty {
-  color: var(--fg-sidebar);
-  opacity: 0.8;
-  padding: 8px 0;
-}
-.diff-line {
-  display: flex;
-  align-items: flex-start;
-  min-height: 1.5em;
-  padding: 0 4px;
-}
-.diff-line-unchanged {
-  background: transparent;
-}
-.diff-line-added {
-  background: rgba(0, 180, 0, 0.35);
-}
-.diff-line-removed {
-  background: rgba(220, 0, 0, 0.35);
-}
-.diff-num {
-  flex-shrink: 0;
-  width: 3em;
-  text-align: right;
-  padding-right: 12px;
-  opacity: 0.6;
-  user-select: none;
-}
-.diff-sign {
-  flex-shrink: 0;
-  width: 1.2em;
-  text-align: center;
-  user-select: none;
-}
-.diff-line-added .diff-sign { color: #6f6; }
-.diff-line-removed .diff-sign { color: #f66; }
-.diff-content {
-  flex: 1;
-  min-width: 0;
-  overflow: visible;
-  word-break: normal;
 }
 
 /* Status bar – always visible, never shrunk or covered; always on top */

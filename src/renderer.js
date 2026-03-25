@@ -48,8 +48,9 @@
     const editorEmptyState = document.getElementById('editor-empty-state');
     const monacoRoot = document.getElementById('monaco-root');
     const monacoDiffRoot = document.getElementById('monaco-diff-root');
-    const diffViewContent = document.getElementById('diff-view-content');
+    const monacoDiffMount = document.getElementById('monaco-diff-mount');
     var diffEditor = null;
+    var diffRevealDisposable = null;
     const fileTreeEl = document.getElementById('file-tree');
     const folderPlaceholder = document.getElementById('folder-placeholder');
     const explorerContextMenu = document.getElementById('explorer-context-menu');
@@ -321,35 +322,38 @@
       return editor;
     }
 
-    function renderDiffHtml(chunks) {
-      if (!chunks || !chunks.length) return '<div class="diff-empty">No changes</div>';
-      var html = [];
-      var oldNum = 1;
-      var newNum = 1;
-      for (var i = 0; i < chunks.length; i++) {
-        var c = chunks[i];
-        var added = !!c.added;
-        var removed = !!c.removed;
-        var lines = (c.value || '').split(/\r?\n/);
-        if (lines.length === 1 && lines[0] === '' && (added || removed)) continue;
-        for (var j = 0; j < lines.length; j++) {
-          var line = lines[j];
-          var isLast = j === lines.length - 1;
-          if (isLast && line === '' && lines.length > 1) continue;
-          if (added) {
-            html.push('<div class="diff-line diff-line-added"><span class="diff-num">' + newNum + '</span><span class="diff-sign">+</span><span class="diff-content">' + escapeHtml(line) + '</span></div>');
-            newNum++;
-          } else if (removed) {
-            html.push('<div class="diff-line diff-line-removed"><span class="diff-num">' + oldNum + '</span><span class="diff-sign">−</span><span class="diff-content">' + escapeHtml(line) + '</span></div>');
-            oldNum++;
-          } else {
-            html.push('<div class="diff-line diff-line-unchanged"><span class="diff-num">' + oldNum + '</span><span class="diff-sign"> </span><span class="diff-content">' + escapeHtml(line) + '</span></div>');
-            oldNum++;
-            newNum++;
-          }
-        }
+    function disposeDiffRevealListener() {
+      if (diffRevealDisposable) {
+        diffRevealDisposable.dispose();
+        diffRevealDisposable = null;
       }
-      return html.join('');
+    }
+
+    function createDiffEditor() {
+      if (diffEditor || !monacoDiffMount) return diffEditor;
+      diffEditor = window.monaco.editor.createDiffEditor(monacoDiffMount, {
+        theme: 'vs-dark',
+        automaticLayout: true,
+        readOnly: true,
+        originalEditable: false,
+        renderSideBySide: true,
+        renderOverviewRuler: true,
+        minimap: { enabled: true },
+        scrollBeyondLastLine: false,
+        fontSize: 14,
+        fontFamily: 'SF Mono, Monaco, Cascadia Code, Source Code Pro, Menlo, Consolas, monospace',
+        contextmenu: false,
+      });
+      function pushDiffCursorStatus(e) {
+        if (!activeFilePath) return;
+        var t = openTabs.get(activeFilePath);
+        if (!t || !t.isDiff) return;
+        var pos = e.position;
+        if (pos) statusPosition.textContent = 'Ln ' + pos.lineNumber + ', Col ' + pos.column;
+      }
+      diffEditor.getModifiedEditor().onDidChangeCursorPosition(pushDiffCursorStatus);
+      diffEditor.getOriginalEditor().onDidChangeCursorPosition(pushDiffCursorStatus);
+      return diffEditor;
     }
 
     function updateTabLabel(filePath) {
@@ -492,11 +496,17 @@
       var name = (relativePath || fullPath).split(/[/\\]/).pop();
       var suffix = (source === 'changes') ? ' (working tree)' : (source && source.indexOf('history:') === 0 ? ' (' + source.slice(8) + ')' : ' (index)');
       var tabLabel = name + suffix;
+      var language = getLanguage(fullPath);
+      var origUri = window.monaco.Uri.parse('alexide-diff-original:' + encodeURIComponent(key));
+      var modUri = window.monaco.Uri.parse('alexide-diff-modified:' + encodeURIComponent(key));
+      var diffOriginalModel = window.monaco.editor.createModel(indexContent || '', language, origUri);
+      var diffModifiedModel = window.monaco.editor.createModel(workingContent || '', language, modUri);
       var tab = {
         filePath: fullPath,
         name: tabLabel,
         isDiff: true,
-        diffChunks: null,
+        diffOriginalModel: diffOriginalModel,
+        diffModifiedModel: diffModifiedModel,
         el: null,
       };
       openTabs.set(key, tab);
@@ -542,19 +552,6 @@
         syncTabsDOM();
       });
 
-      var diffAPI = window.alexide && window.alexide.diff;
-      if (!diffAPI || !diffAPI.compute) {
-        switchToTab(key);
-        return;
-      }
-      diffAPI.compute(indexContent || '', workingContent || '').then(function (chunks) {
-        tab.diffChunks = chunks;
-        if (activeFilePath === key && diffViewContent) {
-          diffViewContent.innerHTML = renderDiffHtml(chunks);
-        }
-      }).catch(function () {
-        tab.diffChunks = [];
-      });
       switchToTab(key);
     }
 
@@ -670,12 +667,32 @@
         extensionViewRoot.style.display = 'none';
         extensionViewRoot.setAttribute('aria-hidden', 'true');
       }
+      if (!tab.isDiff && diffEditor) {
+        disposeDiffRevealListener();
+        diffEditor.setModel(null);
+      }
       if (tab.isDiff) {
         if (editorContainer) editorContainer.classList.remove('editor-empty');
         if (monacoRoot) monacoRoot.style.display = 'none';
         if (monacoDiffRoot) monacoDiffRoot.setAttribute('aria-hidden', 'false');
-        if (diffViewContent) {
-          diffViewContent.innerHTML = tab.diffChunks ? renderDiffHtml(tab.diffChunks) : '<div class="diff-loading">Computing diff…</div>';
+        var de = createDiffEditor();
+        if (de && tab.diffOriginalModel && tab.diffModifiedModel) {
+          disposeDiffRevealListener();
+          var diffTabKey = filePathOrKey;
+          diffRevealDisposable = de.onDidUpdateDiff(function () {
+            disposeDiffRevealListener();
+            if (activeFilePath !== diffTabKey) return;
+            var revealRet = de.revealFirstDiff();
+            function focusModified() {
+              de.getModifiedEditor().focus();
+            }
+            if (revealRet && typeof revealRet.then === 'function') {
+              revealRet.then(focusModified).catch(focusModified);
+            } else {
+              focusModified();
+            }
+          });
+          de.setModel({ original: tab.diffOriginalModel, modified: tab.diffModifiedModel });
         }
         statusPosition.textContent = 'Ln 1, Col 1';
       } else if (tab.isCustomView) {
@@ -766,11 +783,17 @@
         if (next) switchToTab(next);
         else {
           activeFilePath = null;
+          disposeDiffRevealListener();
+          if (diffEditor) diffEditor.setModel(null);
           if (editorContainer) editorContainer.classList.add('editor-empty');
           if (monacoRoot) monacoRoot.style.display = 'none';
           if (monacoDiffRoot) monacoDiffRoot.setAttribute('aria-hidden', 'true');
           statusPosition.textContent = 'Ln 1, Col 1';
         }
+      }
+      if (tab.isDiff) {
+        if (tab.diffOriginalModel) tab.diffOriginalModel.dispose();
+        if (tab.diffModifiedModel) tab.diffModifiedModel.dispose();
       }
       if (!tab.isDiff && !tab.isCustomView && tab.model) tab.model.dispose();
       if (tab.isCustomView && tab.model) tab.model.dispose();
